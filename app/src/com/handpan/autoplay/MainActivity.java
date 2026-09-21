@@ -2,12 +2,15 @@ package com.handpan.autoplay;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
+import android.util.TypedValue;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -56,6 +59,7 @@ public class MainActivity extends Activity {
     private Button btnStop;
     private LinearLayout listSongs;
     private TextView tvLibraryEmpty;
+    private TextView tvLibraryTitle;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private SongLoader.Song song;
@@ -84,6 +88,7 @@ public class MainActivity extends Activity {
         btnStop = (Button) findViewById(R.id.btn_stop);
         listSongs = (LinearLayout) findViewById(R.id.list_songs);
         tvLibraryEmpty = (TextView) findViewById(R.id.tv_library_empty);
+        tvLibraryTitle = (TextView) findViewById(R.id.tv_library_title);
 
         findViewById(R.id.btn_clear_library).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -388,6 +393,17 @@ public class MainActivity extends Activity {
         } else {
             note.append("（不对可在上面手动改）");
         }
+
+        // Tempo: MIDI carries its own, but the BPM box used to be a bare number with no explanation.
+        // Estimate from note onsets so every format shows a sensible value and the box stays in sync.
+        int bpm = TempoEstimator.estimate(mono);
+        if (bpm > 0) {
+            etBpm.setText(String.valueOf(bpm));
+            AppPrefs.setBpm(this, bpm);
+            note.append("\n自动识别曲速：约 ").append(bpm).append(" BPM");
+        } else {
+            note.append("\n曲速：音符太少识别不出，可手动填 BPM");
+        }
         if (song.detail != null) {
             note.append("\n[").append(song.detail).append("]");
         }
@@ -417,23 +433,50 @@ public class MainActivity extends Activity {
         int tonic = PadMapper.tonicFor(lowestMidi(mono), root);
         int hits = TapPlanner.plan(song.notes, root, tonic, cbZero.isChecked(), 1.0f, MAX_CHORD).size();
         SongLibrary.add(this, lastUri.toString(), SongLoader.displayName(this, lastUri),
-                KEYS[keyIndex], hits, song.lengthMs / 1000);
+                song.kind, KEYS[keyIndex], hits, song.lengthMs / 1000);
         refreshLibrary();
     }
 
-    /** Rebuilds the on-screen song list. Uses plain rows so it can live inside the ScrollView. */
+    /** Rebuilds the on-screen song list. Plain views so the rows can live inside the ScrollView. */
     private void refreshLibrary() {
         if (listSongs == null) return;
         listSongs.removeAllViews();
         final List<SongLibrary.Entry> entries = SongLibrary.list(this);
         tvLibraryEmpty.setVisibility(entries.isEmpty() ? View.VISIBLE : View.GONE);
+        tvLibraryTitle.setText(entries.isEmpty()
+                ? "已导入曲目"
+                : "已导入曲目（" + entries.size() + "）　点击载入 · 长按删除");
+
         for (int i = 0; i < entries.size(); i++) {
             final SongLibrary.Entry entry = entries.get(i);
-            TextView row = new TextView(this);
-            row.setText(entry.title());
-            row.setTextSize(13f);
-            row.setPadding(8, 14, 8, 14);
-            row.setBackgroundColor(i % 2 == 0 ? 0x14FFFFFF : 0x08FFFFFF);
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.setBackgroundResource(R.drawable.row_song);
+            int pad = dp(14);
+            row.setPadding(pad, pad, pad, pad);
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            rowParams.setMargins(0, 0, 0, dp(8));
+            row.setLayoutParams(rowParams);
+
+            TextView title = new TextView(this);
+            title.setText(entry.name == null || entry.name.length() == 0 ? "(未命名)" : entry.name);
+            title.setTextSize(16f);
+            title.setTextColor(0xFF102A43);
+            title.setTypeface(null, Typeface.BOLD);
+            title.setSingleLine(true);
+            title.setEllipsize(TextUtils.TruncateAt.MIDDLE);
+
+            TextView meta = new TextView(this);
+            meta.setText(entry.subtitle());
+            meta.setTextSize(12.5f);
+            meta.setTextColor(0xFF6B7C93);
+            meta.setPadding(0, dp(5), 0, 0);
+
+            row.addView(title);
+            row.addView(meta);
+
             row.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -451,6 +494,11 @@ public class MainActivity extends Activity {
             });
             listSongs.addView(row);
         }
+    }
+
+    private int dp(float value) {
+        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value,
+                getResources().getDisplayMetrics());
     }
 
     /**

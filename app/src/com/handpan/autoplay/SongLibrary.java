@@ -30,26 +30,33 @@ public final class SongLibrary {
     public static final class Entry {
         public final String uri;
         public final String name;
+        public final String kind;
         public final String key;
         public final int hits;
         public final long seconds;
         public final long addedAt;
 
-        Entry(String uri, String name, String key, int hits, long seconds, long addedAt) {
+        Entry(String uri, String name, String kind, String key, int hits, long seconds, long addedAt) {
             this.uri = uri;
             this.name = name;
+            this.kind = kind;
             this.key = key;
             this.hits = hits;
             this.seconds = seconds;
             this.addedAt = addedAt;
         }
 
-        /** e.g. "告白气球.mid　B调 · 617次 · 215秒" */
-        public String title() {
-            StringBuilder sb = new StringBuilder(name == null ? "?" : name);
-            sb.append("　").append(key == null ? "?" : key).append("调");
-            if (hits > 0) sb.append(" · ").append(hits).append("次");
-            if (seconds > 0) sb.append(" · ").append(seconds).append("秒");
+        /** Detail line under the song name: format, key, size, and when it was imported. */
+        public String subtitle() {
+            StringBuilder sb = new StringBuilder();
+            if (kind != null && kind.length() > 0) sb.append(kind).append(" · ");
+            sb.append(key == null || key.length() == 0 ? "?" : key + "调");
+            if (hits > 0) sb.append(" · ").append(hits).append(" 次点击");
+            if (seconds > 0) sb.append(" · ").append(seconds).append(" 秒");
+            if (addedAt > 0) {
+                sb.append(" · ").append(new java.text.SimpleDateFormat("MM-dd HH:mm",
+                        java.util.Locale.getDefault()).format(new java.util.Date(addedAt)));
+            }
             return sb.toString();
         }
     }
@@ -75,7 +82,7 @@ public final class SongLibrary {
                 JSONObject o = array.optJSONObject(i);
                 if (o == null) continue;
                 out.add(new Entry(o.optString("uri", ""), o.optString("name", ""),
-                        o.optString("key", ""), o.optInt("hits", 0),
+                        o.optString("kind", ""), o.optString("key", ""), o.optInt("hits", 0),
                         o.optLong("seconds", 0), o.optLong("addedAt", 0)));
             }
         } catch (JSONException e) {
@@ -86,11 +93,12 @@ public final class SongLibrary {
     }
 
     /** Adds or refreshes an entry, moving it to the top. */
-    public static void add(Context c, String uri, String name, String key, int hits, long seconds) {
+    public static void add(Context c, String uri, String name, String kind, String key,
+                           int hits, long seconds) {
         if (uri == null || uri.length() == 0) return;
         List<Entry> entries = list(c);
         List<Entry> next = new ArrayList<Entry>();
-        next.add(new Entry(uri, name, key, hits, seconds, System.currentTimeMillis()));
+        next.add(new Entry(uri, name, kind, key, hits, seconds, System.currentTimeMillis()));
         for (int i = 0; i < entries.size() && next.size() < MAX_ENTRIES; i++) {
             if (!uri.equals(entries.get(i).uri)) next.add(entries.get(i));
         }
@@ -129,6 +137,7 @@ public final class SongLibrary {
             try {
                 o.put("uri", e.uri);
                 o.put("name", e.name);
+                o.put("kind", e.kind);
                 o.put("key", e.key);
                 o.put("hits", e.hits);
                 o.put("seconds", e.seconds);

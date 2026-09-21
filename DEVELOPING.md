@@ -45,6 +45,7 @@ app/src/com/handpan/autoplay/
 ├── SongLoader.java                # 格式分发 + 单音旋律提取
 ├── SongLibrary.java               # 已导入曲目（含持久化 URI 权限）
 ├── KeyDetector.java               # 自动识调（12 个调）
+├── TempoEstimator.java            # 自动识速（从起音间隔推断 BPM）
 ├── ScaleMapper.java               # 音高 → 简谱音级
 ├── PadMapper.java                 # 音级 + 八度 → 9 个琴键中的哪一个
 ├── AppPrefs.java                  # 坐标与设置持久化
@@ -108,6 +109,7 @@ YIN 是**单音**检测器，喂整首混音会锁到贝斯和底鼓。分析频
 | 负例：纯静音 / 白噪声 → 0 个音 | PASS |
 | 九键八度映射（E4→中音3、E5→高音3、A3→低音6、9 键全可达） | PASS 26/26 |
 | 自动识调（12 个调全对） | PASS |
+| 自动识速（500/666/400/250ms 间隔分别还原为 120/90/150/120 BPM；无节奏信息时返回 0） | PASS |
 | 和弦分组（do-mi-sol → 一次三指；同键不重复按；上限生效） | PASS |
 | 点击计划（单个音也必须有输出——曾因整数溢出恒为空） | PASS |
 | APK 打包合规（resources.arsc 不压缩 + 4 字节对齐） | PASS |

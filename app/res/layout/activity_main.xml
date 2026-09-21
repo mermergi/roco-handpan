@@ -81,11 +81,13 @@
             android:text="重新解析（按当前调性/八度，不再自动识调）" />
 
         <TextView
+            android:id="@+id/tv_library_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="已导入曲目（点一下重新载入，长按删除）"
-            android:textSize="13sp"
+            android:layout_marginTop="14dp"
+            android:layout_marginBottom="6dp"
+            android:text="已导入曲目"
+            android:textSize="17sp"
             android:textStyle="bold" />
 
         <LinearLayout
@@ -98,9 +100,9 @@
             android:id="@+id/tv_library_empty"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingBottom="4dp"
-            android:text="（还没有导入过曲目）"
-            android:textSize="12sp" />
+            android:paddingBottom="6dp"
+            android:text="还没有导入过曲目。点上面【选择音乐文件】导入一首，它会记在这里。"
+            android:textSize="13sp" />
 
         <Button
             android:id="@+id/btn_clear_library"
@@ -129,7 +131,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="简谱BPM" />
+                android:text="BPM" />
 
             <EditText
                 android:id="@+id/et_bpm"
