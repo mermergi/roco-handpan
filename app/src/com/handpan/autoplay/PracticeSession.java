@@ -131,6 +131,66 @@ public final class PracticeSession {
         return newlyMissed;
     }
 
+    /** One upcoming press, or several pads pressed together. */
+    public static final class Group {
+        /** 1-based position in the upcoming queue: this is the number shown on the rings. */
+        public final int order;
+        public final long timeMs;
+        public final int[] slots;
+
+        Group(int order, long timeMs, int[] slots) {
+            this.order = order;
+            this.timeMs = timeMs;
+            this.slots = slots;
+        }
+    }
+
+    /** Presses closer together than this count as one simultaneous press. */
+    public static final long GROUP_WINDOW_MS = 30L;
+
+    /**
+     * The presses due soon, grouped so that pads pressed together share one number and colour.
+     *
+     * <p>Numbering runs over the pending queue, not the whole song: the next press is always 1, the
+     * one after it 2, and so on, which is what makes the order readable while playing. A group that
+     * is already past its window is dropped rather than shown late.
+     *
+     * @return groups in time order, at most {@code maxGroups} of them
+     */
+    public java.util.List<Group> upcomingGroups(long nowMs, long leadMs, int maxGroups) {
+        java.util.List<Group> out = new java.util.ArrayList<Group>();
+        if (maxGroups <= 0) return out;
+
+        int order = 0;
+        int i = 0;
+        while (i < times.length) {
+            if (judged[i]) {
+                i++;
+                continue;
+            }
+            long onset = times[i];
+            order++;
+
+            // Collect every pending press at (nearly) the same instant: a chord shares a number.
+            java.util.List<Integer> slotsInGroup = new java.util.ArrayList<Integer>();
+            int j = i;
+            while (j < times.length && times[j] - onset <= GROUP_WINDOW_MS) {
+                if (!judged[j] && !slotsInGroup.contains(slots[j])) slotsInGroup.add(slots[j]);
+                j++;
+            }
+            i = j;
+
+            if (onset - nowMs > leadMs) break; // the queue is in time order, so nothing later is due
+            if (nowMs - onset > OK_MS) continue; // window closed; it is about to be a miss
+
+            int[] slots_arr = new int[slotsInGroup.size()];
+            for (int k = 0; k < slots_arr.length; k++) slots_arr[k] = slotsInGroup.get(k);
+            out.add(new Group(order, onset, slots_arr));
+            if (out.size() >= maxGroups) break;
+        }
+        return out;
+    }
+
     /** Index of the next press still to be judged, or -1 when none remain. */
     public int nextPendingIndex() {
         for (int i = 0; i < times.length; i++) {

@@ -5,6 +5,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -28,6 +29,8 @@ public class PracticeActivity extends Activity {
     private LinearLayout rowSource;
     private Spinner spSource;
     private View btnStart;
+    private CheckBox cbTakeover;
+    private Spinner spSpeed;
 
     private boolean recordingMode;
     private List<SongLibrary.Entry> sources = new ArrayList<SongLibrary.Entry>();
@@ -43,6 +46,9 @@ public class PracticeActivity extends Activity {
         rowSource = (LinearLayout) findViewById(R.id.row_source);
         spSource = (Spinner) findViewById(R.id.sp_source);
         btnStart = findViewById(R.id.btn_start);
+        cbTakeover = (CheckBox) findViewById(R.id.cb_takeover);
+        spSpeed = (Spinner) findViewById(R.id.sp_speed);
+        setupSpeedSpinner();
 
         findViewById(R.id.btn_mode_practice).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -86,7 +92,17 @@ public class PracticeActivity extends Activity {
     private void setRecordingMode(boolean record) {
         recordingMode = record;
         rowSource.setVisibility(record ? View.GONE : View.VISIBLE);
+        findViewById(R.id.row_speed).setVisibility(record ? View.GONE : View.VISIBLE);
         btnStart.setEnabled(true);
+        // Recording has no alternative: without intercepting touches there is no way to know which
+        // pad was pressed. Practice can run as guidance only.
+        cbTakeover.setVisibility(record ? View.GONE : View.VISIBLE);
+        if (!record) {
+            // On by default: without it the app cannot see a single press, so neither the score nor
+            // the note lane can consume anything - items would only ever time out.
+            cbTakeover.setChecked(true);
+        }
+        selectCurrentSpeed();
         tvHelp.setText(record
                 ? "录制模式\n\n"
                 + "1. 点【开始（然后切到游戏）】\n"
@@ -96,10 +112,71 @@ public class PracticeActivity extends Activity {
                 + "只记录你按了哪个琴键、什么时候按的，不录声音。"
                 : "练习模式\n\n"
                 + "1. 选一首曲子，点【开始（然后切到游戏）】\n"
-                + "2. 手机会切回游戏，你要按的琴键上会出现**收拢的计时圈**\n"
-                + "3. 圈收到底的那一下按下去，游戏照常出声，同时给你计分\n"
-                + "4. 屏幕角落显示实时分数，点【结束】看总评\n\n"
-                + "需要先在【设置】里校准过 9 个琴键，并开启无障碍服务。");
+                + "2. 手机会切回游戏，要按的琴键上会出现**收拢的计时圈**\n"
+                + "3. 圈收到底的那一下按下去\n"
+                + "4. 角落显示实时分数，点【结束】看总评\n"
+                + "5. 练太快要放慢？回来把【练习倍速】调到 0.5× 再开始\n\n"
+                + "【接管触摸以判分】的取舍：\n"
+                + "· 勾上：能判分。你的每一下由悬浮层转发给游戏（声音会晚几十毫秒），\n"
+                + "  转发的一瞬间悬浮层要让开，那一瞬间的按键记不到。\n"
+                + "· 不勾：只画提示，游戏收到的触摸和你没装 APP 时完全一样，但不算分。\n\n"
+                + "两种都要先在【设置】里校准 9 个琴键；勾选时还要开无障碍服务。");
+    }
+
+    /**
+     * Practice tempo, chosen here rather than on the floating bar.
+     *
+     * <p>Shared with the play screen's 速度 setting, so there is one tempo in the app instead of two
+     * competing ones. A spinner picks any value directly - the overlay's cycling button could only
+     * step upward, which made slowing down awkward.
+     */
+    private void setupSpeedSpinner() {
+        List<String> labels = new ArrayList<String>();
+        for (int i = 0; i < SpeedClock.SPEEDS.length; i++) {
+            labels.add(formatSpeed(SpeedClock.SPEEDS[i]));
+        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
+                android.R.layout.simple_spinner_item, labels);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spSpeed.setAdapter(adapter);
+        selectCurrentSpeed();
+        spSpeed.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position,
+                                       long id) {
+                if (position >= 0 && position < SpeedClock.SPEEDS.length) {
+                    AppPrefs.setSpeed(PracticeActivity.this, SpeedClock.SPEEDS[position]);
+                }
+            }
+
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {
+            }
+        });
+    }
+
+    private void selectCurrentSpeed() {
+        float current = AppPrefs.getSpeed(this);
+        int best = 2; // 1.0x
+        float bestDelta = Float.MAX_VALUE;
+        for (int i = 0; i < SpeedClock.SPEEDS.length; i++) {
+            float delta = Math.abs(SpeedClock.SPEEDS[i] - current);
+            if (delta < bestDelta) {
+                bestDelta = delta;
+                best = i;
+            }
+        }
+        spSpeed.setSelection(best);
+    }
+
+    private static String formatSpeed(float value) {
+        return (value == Math.round(value) ? String.valueOf((int) value) : String.valueOf(value)) + "×";
+    }
+
+    private float chosenSpeed() {
+        int position = spSpeed.getSelectedItemPosition();
+        if (position < 0 || position >= SpeedClock.SPEEDS.length) return AppPrefs.getSpeed(this);
+        return SpeedClock.SPEEDS[position];
     }
 
     private void refreshSources() {
@@ -136,7 +213,7 @@ public class PracticeActivity extends Activity {
 
         if (recordingMode) {
             status("录制中…切到游戏开始弹吧。");
-            GameOverlay.start(this, GameOverlay.MODE_RECORD, null, callback);
+            GameOverlay.start(this, GameOverlay.MODE_RECORD, null, callback, true, 1.0f);
             goToGame();
             return;
         }
@@ -189,8 +266,11 @@ public class PracticeActivity extends Activity {
             slots[i] = chart.get(i).slot;
         }
         PracticeSession session = new PracticeSession(times, slots);
-        status("练习中：" + name + "（共 " + chart.size() + " 次按键）");
-        GameOverlay.start(this, GameOverlay.MODE_PRACTICE, session, callback);
+        boolean takeOver = cbTakeover.isChecked();
+        status("练习中：" + name + "（共 " + chart.size() + " 次按键）"
+                + (takeOver ? "" : "　仅提示，不判分"));
+        GameOverlay.start(this, GameOverlay.MODE_PRACTICE, session, callback, takeOver,
+                chosenSpeed());
         goToGame();
     }
 

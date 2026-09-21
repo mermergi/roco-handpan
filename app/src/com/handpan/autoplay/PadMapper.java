@@ -36,9 +36,15 @@ public final class PadMapper {
             "低音 6",
     };
 
-    /** Compact名 for the note preview: a trailing quote is an octave up, a comma an octave down. */
+    /**
+     * Compact display form, used in previews and the practice note list.
+     *
+     * <p>Circled digits mark the pads that sit outside the middle octave (high 1/2/3 and the low 6);
+     * the middle octave stays plain. That matches how the game labels them - a dot above or below
+     * the numeral - while staying readable in one character.
+     */
     public static final String[] SHORT = {
-            "1'", "2'", "3'", "3", "4", "5", "6", "7", "6,",
+            "①", "②", "③", "3", "4", "5", "6", "7", "⑥",
     };
 
     /** Semitone offsets of a major scale. */

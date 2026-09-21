@@ -51,6 +51,32 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/row_speed"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="练习倍速" />
+
+            <Spinner
+                android:id="@+id/sp_speed"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <CheckBox
+            android:id="@+id/cb_takeover"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="接管触摸：能判分、音符列表会点一个消一个（关掉＝只提示，游戏完全不受影响）" />
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
