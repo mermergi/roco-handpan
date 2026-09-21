@@ -17,7 +17,7 @@ WORK="$ROOT/build/testsrc"
 # Modules with no Android imports.
 PURE="RawNote ScaleMapper MidiParser PitchDetector PadMapper KeyDetector TapPlanner \
 TempoEstimator SnapshotCodec ScheduleClock PlaylistNavigator \
-RecordingCodec PracticeSession"
+RecordingCodec PracticeSession PadHitTester"
 
 rm -rf "$WORK" "$OUT"
 mkdir -p "$WORK/com/handpan/autoplay" "$OUT"

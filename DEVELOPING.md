@@ -36,8 +36,9 @@ app/src/com/handpan/autoplay/
 ├── MainActivity.java              # 演奏页（曲目 + 全部演奏参数 + 解析/保存）
 ├── SongsActivity.java             # 曲目库页（导入 / 列表 / 清空）
 ├── SettingsActivity.java          # 设置页（权限 / 校准 / 试弹）
-├── PracticeActivity.java          # 练习 / 录制页
-├── PadBoardView.java              # 九键演奏板（计时圈、命中反馈）
+├── PracticeActivity.java          # 练习 / 录制控制面板
+├── GameOverlay.java               # 游戏上的悬浮层：转发触摸 + 计时圈 + 判分
+├── PadHitTester.java              # 坐标 → 哪个琴键（纯 Java，可测）
 ├── PracticeSession.java           # 练习判分（纯 Java，可测）
 ├── RecordingStore.java            # 录音存取（Android 存储层）
 ├── RecordingCodec.java            # 录音文件格式（纯 Java，可测）
@@ -72,6 +73,11 @@ app/src/com/handpan/autoplay/
 三个 Activity 之间没有直接引用：当前曲目放在 `Session`（进程内单例，`version()` 自增供各页判断是否要刷新），
 演奏参数放在 `AppPrefs`（演奏页控件改动即写回，并立即重画预览）。演奏页 `onResume` 比对 `Session.version()`，
 变了才同步控件并重画。任一页都可以独立改动，不牵动其它页。
+
+**练习/录制为什么是悬浮层**：游戏的声音出不来，用户必须在游戏里弹。所以 APP 盖一层透明、
+**可接受触摸**的悬浮窗：手指落下时立刻 `dispatchGesture` 把这一下转发回游戏（游戏照常发声），
+同时用坐标匹配到琴键并记录/判分。判分用的是触摸自身的时刻，不受转发延迟影响；
+代价是悬浮层会吃掉手势，只适合固定键位的界面。
 
 **两种解析模式**：`AutoDetect.apply()` 是"自动模式"的唯一入口（导入文件与【自动解析】按钮都走它），
 识别调性与曲速并覆盖设定。【手动解析】刻意不调用它——它不碰 `AppPrefs`，只把文件按当前 BPM 重新解析一遍，
@@ -135,6 +141,7 @@ TestCore        51 项   MIDI 解析 / 音高检测 / 识调 / 识速 / 九键�
 TestPractice    29 项   判定窗口 / 空按不计分 / 漏拍自动 Miss / 最近目标选择 / 准确率
 TestRecording   14 项   录音格式往返 / 坏行与越界跳过 / 版本校验
 TestRoundTrip    4 项   琴键→音符→琴键 精确往返（12 调 × 7 八度 × 9 键）
+TestHitTester   10 项   触摸坐标 → 琴键匹配（范围、取最近、未校准、边界）
 ```
 
 MIDI 固件由 `tests/gen_fixtures.py` 逐字节生成，不联网、不依赖库。需要 Android 的部分
