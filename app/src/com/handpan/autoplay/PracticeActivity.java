@@ -318,7 +318,7 @@ public class PracticeActivity extends Activity {
     private List<RecordingCodec.Hit> chartOfNotes(SongLoader.Song song) {
         List<RawNote> mono = SongLoader.monophonic(song.notes);
         int root = AppPrefs.getRootPitchClass(this);
-        int tonic = PadMapper.tonicFor(lowestMidi(mono), root);
+        int tonic = PadMapper.tonicFor(mono, root);
         List<TapPlanner.Hit> hits = TapPlanner.plan(song.notes, root, tonic,
                 AppPrefs.getUseZeroPad(this), 1.0f, AppPrefs.getChordLimit(this));
         List<RecordingCodec.Hit> out = new ArrayList<RecordingCodec.Hit>();
@@ -336,11 +336,6 @@ public class PracticeActivity extends Activity {
         return new ArrayList<RecordingCodec.Hit>(hits);
     }
 
-    private static int lowestMidi(List<RawNote> notes) {
-        int low = 127;
-        for (int i = 0; i < notes.size(); i++) low = Math.min(low, notes.get(i).midi);
-        return low;
-    }
 
     private void status(String message) {
         tvStatus.setText(message);

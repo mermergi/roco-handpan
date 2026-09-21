@@ -45,6 +45,17 @@ public class TestCore {
         return list;
     }
 
+    /** The nine pad pitches at do = C4, for failure messages. */
+    static String describePads() {
+        StringBuilder sb = new StringBuilder();
+        for (int s = 0; s < 9; s++) {
+            if (s > 0) sb.append(' ');
+            sb.append(PadMapper.LABEL[s]).append('=')
+                    .append(ScaleMapper.nameOf(PadMapper.midiForSlot(s, 0, 60)));
+        }
+        return sb.toString();
+    }
+
     public static void main(String[] args) throws Exception {
         section("MIDI 解析");
         MidiParser.Result scale = midi("scale.mid");
@@ -163,13 +174,70 @@ public class TestCore {
         check("无节奏信息 -> 0", TempoEstimator.estimate(new ArrayList<RawNote>()) == 0, "");
 
         section("九键映射与和弦");
-        check("E4 -> 中音3", PadMapper.slotFor(64, 0, 60, true) == 3,
+        // 音位表按真实琴键校：do = C4 时九个键就是 A2 E3 F3 G3 A3 B3 C4 D4 E4。
+        // 老版本整张表高了一个八度，于是 E4 被判成中音3、A3 被判成低音6 —— 都是错的。
+        int[] realPads = {60, 62, 64, 52, 53, 55, 57, 59, 45};
+        boolean padsOk = true;
+        for (int s = 0; s < 9; s++) {
+            if (PadMapper.midiForSlot(s, 0, 60) != realPads[s]) padsOk = false;
+        }
+        check("do=C4 时九键音高 = C4 D4 E4 F3 G3 A3 B3 A2", padsOk, describePads());
+        check("E4 -> 高音3", PadMapper.slotFor(64, 0, 60, true) == 2,
                 "" + PadMapper.slotFor(64, 0, 60, true));
         check("E5 -> 高音3", PadMapper.slotFor(76, 0, 60, true) == 2,
                 "" + PadMapper.slotFor(76, 0, 60, true));
-        check("A3 -> 低音6", PadMapper.slotFor(57, 0, 60, true) == 8,
+        check("A3 -> 中音6", PadMapper.slotFor(57, 0, 60, true) == 6,
                 "" + PadMapper.slotFor(57, 0, 60, true));
+        check("A2 -> 低音6", PadMapper.slotFor(45, 0, 60, true) == 8,
+                "" + PadMapper.slotFor(45, 0, 60, true));
         check("调外音吸附到最近音级", ScaleMapper.degreeFor(66, 0) == 4, "");
+
+        section("选音区：离原始音高越近越好");
+        // 三个八度的旋律（钢琴 MIDI 的常态）。老规则把 do 钉在最低音上，
+        // 整条旋律跑到琴的上方，绝大多数音只能折回来，低音6 和中音3 一辈子用不到。
+        List<RawNote> wide = new ArrayList<RawNote>();
+        for (int i = 0; i < 36; i++) wide.add(new RawNote(48 + i, i * 250L, 250));
+        int wideRoot = 0;
+        int anchorTonic = PadMapper.anchorTonicFor(48, wideRoot);
+        int chosen = PadMapper.tonicFor(wide, wideRoot);
+        long anchorCost = PadMapper.displacement(wide, anchorTonic);
+        long chosenCost = PadMapper.displacement(wide, chosen);
+        check("三个八度的旋律会换一个音区（不再钉在最低音上）", chosen != anchorTonic,
+                "锚点 " + anchorTonic + " -> 选中 " + chosen);
+        check("换完之后每个音离原音高更近", chosenCost < anchorCost,
+                "总偏移 " + anchorCost + " -> " + chosenCost);
+        int[] wideHist = new int[9];
+        for (int i = 0; i < wide.size(); i++) {
+            int s = PadMapper.slotFor(wide.get(i).midi, wideRoot, chosen, true);
+            if (s >= 0) wideHist[s]++;
+        }
+        check("低音6 用上了", wideHist[8] > 0, "" + wideHist[8]);
+        check("中音3 用上了", wideHist[3] > 0, "" + wideHist[3]);
+        int placed = 0;
+        for (int i = 0; i < 9; i++) placed += wideHist[i];
+        check("换音区后每个音都仍有键位", placed == wide.size(), placed + "/" + wide.size());
+
+        // 音区搜索依赖 nearestStep 的窗口近似，跟暴力扫描必须完全一致。
+        int stepMismatch = 0;
+        for (int tonic = 15; tonic <= 123; tonic += 3) {
+            for (int midi = 0; midi <= 127; midi += 1) {
+                if (PadMapper.nearestStep(midi, tonic) != PadMapper.nearestStepByScan(midi, tonic)) {
+                    stepMismatch++;
+                }
+            }
+        }
+        check("窗口版音级定位与暴力扫描完全一致", stepMismatch == 0, stepMismatch + " 处不一致");
+
+        // 平局时保持老锚点：一个八度的曲子怎么放都不完美，但不能再无谓地挪。
+        List<RawNote> narrow = new ArrayList<RawNote>();
+        int[] scaleSteps = {0, 2, 4, 5, 7, 9, 11, 12};
+        for (int i = 0; i < scaleSteps.length; i++) {
+            narrow.add(new RawNote(60 + scaleSteps[i], i * 500L, 500));
+        }
+        check("音区搜索不会把总偏移弄得更大",
+                PadMapper.displacement(narrow, PadMapper.tonicFor(narrow, 0))
+                        <= PadMapper.displacement(narrow, PadMapper.anchorTonicFor(60, 0)),
+                PadMapper.tonicFor(narrow, 0) + "");
 
         List<TapPlanner.Hit> single = TapPlanner.plan(notes(new int[][]{{60}}, new long[]{0}, 500),
                 0, 60, true, 1f, 4);

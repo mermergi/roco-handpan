@@ -220,18 +220,13 @@ public class SongsActivity extends Activity {
     private void remember(Uri uri, SongLoader.Song song) {
         int root = AppPrefs.getRootPitchClass(this);
         List<RawNote> mono = SongLoader.monophonic(song.notes);
-        int tonic = PadMapper.tonicFor(lowestMidi(mono), root);
+        int tonic = PadMapper.tonicFor(mono, root);
         int hits = TapPlanner.plan(song.notes, root, tonic, AppPrefs.getUseZeroPad(this), 1.0f,
                 AppPrefs.getChordLimit(this)).size();
         SongLibrary.add(this, uri.toString(), SongLoader.displayName(this, uri), song.kind,
                 AppPrefs.getKey(this), hits, song.lengthMs / 1000);
     }
 
-    private static int lowestMidi(List<RawNote> notes) {
-        int low = 127;
-        for (int i = 0; i < notes.size(); i++) low = Math.min(low, notes.get(i).midi);
-        return low;
-    }
 
     // ------------------------------------------------------------------ list
 

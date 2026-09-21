@@ -189,7 +189,7 @@ public class MainActivity extends Activity {
         }
         List<RawNote> mono = SongLoader.monophonic(song.notes);
         int root = AppPrefs.getRootPitchClass(this);
-        int tonic = PadMapper.tonicFor(lowestMidi(mono), root);
+        int tonic = PadMapper.tonicFor(mono, root);
         int chord = AppPrefs.getChordLimit(this);
 
         List<TapPlanner.Hit> hits = TapPlanner.plan(song.notes, root, tonic,
@@ -231,11 +231,6 @@ public class MainActivity extends Activity {
                 + "\n\n录音按存下的琴键直接回放，不经过解析。");
     }
 
-    private static int lowestMidi(List<RawNote> notes) {
-        int low = 127;
-        for (int i = 0; i < notes.size(); i++) low = Math.min(low, notes.get(i).midi);
-        return low;
-    }
 
     // ------------------------------------------------------------------ playback
 
@@ -278,7 +273,7 @@ public class MainActivity extends Activity {
         float speed = AppPrefs.getSpeed(this);
         if (speed <= 0f) speed = 1f;
         List<RawNote> mono = SongLoader.monophonic(song.notes);
-        int tonic = PadMapper.tonicFor(lowestMidi(mono), root);
+        int tonic = PadMapper.tonicFor(mono, root);
 
         List<TapPlanner.Hit> hits = TapPlanner.plan(song.notes, root, tonic,
                 AppPrefs.getUseZeroPad(this), speed, AppPrefs.getChordLimit(this));
