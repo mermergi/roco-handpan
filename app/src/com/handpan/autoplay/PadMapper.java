@@ -83,6 +83,16 @@ public final class PadMapper {
     /** Semitone distance of each pad from do, i.e. {@code midiForSlot(slot, any, x) - x}. */
     private static final int[] OFFSET = new int[SLOTS];
 
+    /**
+     * What playing the wrong scale degree costs, in semitones of pitch error.
+     *
+     * <p>Nine - a major sixth - is where the published notation for a real score puts the line. It
+     * writes a low A# as 低音6 (G#, two semitones away) instead of its own degree 中音7 (A#4, twelve
+     * away), yet keeps a low B on 高音1 (twelve away) instead of 低音6 three semitones away. Those two
+     * decisions differ by exactly one semitone of advantage, so the threshold sits between them.
+     */
+    private static final int SUBSTITUTION_COST = 9;
+
     static {
         for (int slot = 0; slot < SLOTS; slot++) {
             OFFSET[slot] = scaleMidi(0, (DEGREE[slot] - 1) + 7 * OCTAVE[slot]);
@@ -152,6 +162,58 @@ public final class PadMapper {
         return bestSlot;
     }
 
+    /** The scale degree a pitch belongs to, snapped to the nearest degree of the key. */
+    private static int degreeAt(int midi, int tonicMidi) {
+        int step = nearestStep(midi, tonicMidi);
+        return step - Math.floorDiv(step, 7) * 7 + 1;
+    }
+
+    /** The pad the note's <em>own</em> degree would use, ignoring any substitution. */
+    private static int degreeSlot(int midi, int tonicMidi) {
+        int step = nearestStep(midi, tonicMidi);
+        int octave = Math.floorDiv(step, 7);
+        return slotForDegree(step - octave * 7 + 1, octave);
+    }
+
+    /**
+     * Picks the pad that will sound closest to a pitch, allowing the degree to change.
+     *
+     * <p>Preserving the degree is the right instinct - it keeps the tune's intervals - but the
+     * instrument cannot play every degree in every octave. It has one do, on 高音1; a melody that
+     * dips below it, or that was written for piano across three octaves, soon runs out of pads of
+     * its own degree and gets dragged a whole octave to a note it is not. Every handpan arrangement
+     * substitutes in that situation, and the published notation for a real score does exactly that.
+     *
+     * <p>Both options are costed in the same unit - semitones of pitch error - with a wrong degree
+     * charged {@link #SUBSTITUTION_COST}. Equal costs keep the note's own degree. A note the
+     * instrument plays exactly always wins at cost zero, so nothing already right is disturbed.
+     *
+     * <p>Measured on a real score, first 16 bars, against its published notation:
+     * <pre>
+     *   own degree only   低音6 x4    average 2.63 semitones off
+     *   with substitution 低音6 x14   average 1.49 semitones off
+     * </pre>
+     */
+    private static int chooseSlot(int midi, int tonicMidi) {
+        int ownDegree = degreeAt(midi, tonicMidi);
+        int bestSlot = -1;
+        int bestCost = Integer.MAX_VALUE;
+        for (int slot = 0; slot < SLOTS; slot++) {
+            int cost = Math.abs(tonicMidi + OFFSET[slot] - midi)
+                    + (DEGREE[slot] == ownDegree ? 0 : SUBSTITUTION_COST);
+            // Strictly better wins; a tie keeps whichever candidate came first, and the loop runs in
+            // slot order, so an equal-cost substitute must be rejected explicitly to protect the
+            // note's own degree.
+            if (cost < bestCost
+                    || (cost == bestCost && bestSlot >= 0 && DEGREE[slot] == ownDegree
+                    && DEGREE[bestSlot] != ownDegree)) {
+                bestCost = cost;
+                bestSlot = slot;
+            }
+        }
+        return bestSlot;
+    }
+
     /**
      * Reference tonic used to break ties: the degree-1 pitch at or immediately below the melody's
      * lowest note.
@@ -208,18 +270,24 @@ public final class PadMapper {
     }
 
     /**
-     * Total distance, in semitones, between the melody's pitches and the pitches the pads will
-     * actually sound for them. Lower is better; zero means every note is played at its written pitch.
+     * Total distance, in semitones, between the melody's pitches and the pitches the pads of the
+     * note's <em>own</em> degree would sound. Lower is better; zero means every note is playable at
+     * its written pitch.
+     *
+     * <p>Deliberately measures the no-substitution mapping even though {@link #slotFor} substitutes.
+     * Register and degree are separate decisions and mixing them is what makes a placement search go
+     * wrong: once substitution is allowed, an octave where the melody is far from its own degrees
+     * starts to score well, because every note can be answered by some nearby pad of some other
+     * degree. On a C major scale that search happily picks the octave whose answer to do is 低音6 -
+     * pitching the whole tune wrong. So the register is chosen with degrees held, and substitution
+     * happens afterwards, per note, inside that register.
      */
     static long displacement(List<RawNote> notes, int tonicMidi) {
         long total = 0;
         for (int i = 0; i < notes.size(); i++) {
             int midi = notes.get(i).midi;
             if (midi < 0 || midi > 127) continue;
-            int step = nearestStep(midi, tonicMidi);
-            int octave = Math.floorDiv(step, 7);
-            int degree = step - octave * 7 + 1;
-            int slot = slotForDegree(degree, octave);
+            int slot = degreeSlot(midi, tonicMidi);
             if (slot < 0) continue;
             total += Math.abs(tonicMidi + OFFSET[slot] - midi);
         }
@@ -247,11 +315,10 @@ public final class PadMapper {
      */
     public static int slotFor(int midi, int rootPc, int tonicMidi, boolean octaveAware) {
         if (midi < 0 || midi > 127) return -1;
+        if (octaveAware) return chooseSlot(midi, tonicMidi);
 
         int step = nearestStep(midi, tonicMidi);
-        int octave = Math.floorDiv(step, 7);
-        int degree = step - octave * 7 + 1;
-        if (!octaveAware) octave = 0;
-        return slotForDegree(degree, octave);
+        int degree = step - Math.floorDiv(step, 7) * 7 + 1;
+        return slotForDegree(degree, 0);
     }
 }

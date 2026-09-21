@@ -190,6 +190,31 @@ public class TestCore {
                 "" + PadMapper.slotFor(57, 0, 60, true));
         check("A2 -> 低音6", PadMapper.slotFor(45, 0, 60, true) == 8,
                 "" + PadMapper.slotFor(45, 0, 60, true));
+
+        section("弹不到的音：按站点谱面的实测阈值替换音级");
+        // do=B4 时九键 = G#3 D#4 E4 F#4 G#4 A#4 B4 C#5 D#5，站点 Lemon 简谱就是这一套。
+        int doB = 71;
+        check("原样可弹的音绝不被换掉：G#3 就是低音6",
+                PadMapper.slotFor(56, 11, doB, true) == 8,
+                PadMapper.labelOf(PadMapper.slotFor(56, 11, doB, true)));
+        // 站点把 A#3 记成 6̣（低音6）：A# 自己是 7 级，中音7 在 A#4，差 12；低音6 只差 2。
+        check("A#3 换成低音6（站点谱面就这么写的）",
+                PadMapper.slotFor(58, 11, doB, true) == 8,
+                PadMapper.labelOf(PadMapper.slotFor(58, 11, doB, true)));
+        // B3 是 1 级，换成低音6 只省 9 个半音 —— 正好不够，平局保自己的音级。
+        check("B3 保住 1 级（换过去只省 9 个半音，不到阈值）",
+                PadMapper.slotFor(59, 11, doB, true) == 0,
+                PadMapper.labelOf(PadMapper.slotFor(59, 11, doB, true)));
+        // 换级要真的划算才行：G4 换到高音3 也只省 9 个半音，不该换。
+        check("省得不够就不换音级：G4 仍是 5 级",
+                PadMapper.slotFor(67, 0, 60, true) == 5,
+                PadMapper.labelOf(PadMapper.slotFor(67, 0, 60, true)));
+        // 选音区必须只看「保音级」的偏差，否则会挑一个到处都能凑合、但整体移调错误的八度。
+        List<RawNote> oneNote = new ArrayList<RawNote>();
+        oneNote.add(new RawNote(58, 0, 500));
+        check("选音区用的偏差不含替换（A#3 按 12 半音算，不是 2）",
+                PadMapper.displacement(oneNote, doB) == 12,
+                "" + PadMapper.displacement(oneNote, doB));
         check("调外音吸附到最近音级", ScaleMapper.degreeFor(66, 0) == 4, "");
 
         section("选音区：离原始音高越近越好");
@@ -246,11 +271,12 @@ public class TestCore {
         List<TapPlanner.Hit> chord = TapPlanner.plan(notes(new int[][]{{60, 64, 67}}, new long[]{0}, 500),
                 0, 60, true, 1f, 4);
         check("do-mi-sol -> 一次三指", chord.size() == 1 && chord.get(0).slots.length == 3, "");
-        int[] big = {60, 62, 64, 65, 67, 69, 71};
-        check("和弦上限 4 生效", TapPlanner.plan(notes(new int[][]{big}, new long[]{0}, 500),
+        int[] seven = {60, 62, 64, 52, 53, 55, 57}; // do re mi + 中音3 4 5 6，七个不同的键
+        check("和弦上限 4 生效", TapPlanner.plan(notes(new int[][]{seven}, new long[]{0}, 500),
                 0, 60, true, 1f, 4).get(0).slots.length == 4, "");
-        check("和弦上限 9 生效", TapPlanner.plan(notes(new int[][]{big}, new long[]{0}, 500),
+        check("和弦上限 9 生效", TapPlanner.plan(notes(new int[][]{seven}, new long[]{0}, 500),
                 0, 60, true, 1f, 9).get(0).slots.length == 7, "");
+        int[] big = {60, 62, 64, 65, 67, 69, 71};
         check("和弦上限 0 按 1 处理", TapPlanner.plan(notes(new int[][]{big}, new long[]{0}, 500),
                 0, 60, true, 1f, 0).get(0).slots.length == 1, "");
         check("空/null 不崩", TapPlanner.plan(null, 0, 60, true, 1f, 4).isEmpty(), "");
