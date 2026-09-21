@@ -33,9 +33,9 @@ python3 pack.py verify --apk handpan-autoplay.apk
 
 ```
 app/src/com/handpan/autoplay/
-├── MainActivity.java              # 演奏页
-├── SongsActivity.java             # 曲目库页（导入 / 解析 / 保存 / 列表）
-├── SettingsActivity.java          # 设置页（权限 / 校准 / 演奏参数）
+├── MainActivity.java              # 演奏页（曲目 + 全部演奏参数 + 解析/保存）
+├── SongsActivity.java             # 曲目库页（导入 / 列表 / 清空）
+├── SettingsActivity.java          # 设置页（权限 / 校准 / 试弹）
 ├── Session.java                   # 三页共享的当前曲目
 ├── Loader.java                    # 后台解析 + 回主线程回调
 ├── Ui.java                        # 共用小工具
@@ -62,8 +62,11 @@ app/src/com/handpan/autoplay/
 ## 页面之间的状态
 
 三个 Activity 之间没有直接引用：当前曲目放在 `Session`（进程内单例，`version()` 自增供各页判断是否要刷新），
-演奏参数放在 `AppPrefs`（设置页 `onPause` 写回）。演奏页 `onResume` 比对 `Session.version()`，变了才重画。
-任一页都可以独立改动，不牵动其它页。
+演奏参数放在 `AppPrefs`（演奏页控件改动即写回，并立即重画预览）。演奏页 `onResume` 比对 `Session.version()`，
+变了才同步控件并重画。任一页都可以独立改动，不牵动其它页。
+
+**参数为什么放在演奏页**：调性和弦上限这些是会边调边看的，放在曲目名下面改动即时反映到预览，
+比"跳到设置页改完再退回来"直接得多。设置页只留一次配好就不再动的东西（权限、校准）。
 
 顺序 / 随机演奏的衔接在演奏页：一次演奏完成且模式不是"单曲"时，从 `SongLibrary` 取下一首，
 优先读存档（秒切），没有存档才回到解析流程，然后重新走倒计时。

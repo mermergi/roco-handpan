@@ -7,7 +7,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
-import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -35,7 +34,6 @@ public class SongsActivity extends Activity {
     private TextView tvLibraryTitle;
     private TextView tvLibraryEmpty;
     private LinearLayout listSongs;
-    private Button btnSave;
 
     private Uri currentUri;
 
@@ -49,29 +47,11 @@ public class SongsActivity extends Activity {
         tvLibraryTitle = (TextView) findViewById(R.id.tv_library_title);
         tvLibraryEmpty = (TextView) findViewById(R.id.tv_library_empty);
         listSongs = (LinearLayout) findViewById(R.id.list_songs);
-        btnSave = (Button) findViewById(R.id.btn_save);
 
         findViewById(R.id.btn_pick).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 pickFile();
-            }
-        });
-        findViewById(R.id.btn_reparse).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Uri uri = currentUri != null ? currentUri : sessionUri();
-                if (uri == null) {
-                    status("还没导入过文件，先点【选择音乐文件】。");
-                    return;
-                }
-                parse(uri, false);
-            }
-        });
-        btnSave.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                saveSnapshot();
             }
         });
         findViewById(R.id.btn_clear_library).setOnClickListener(new View.OnClickListener() {
@@ -89,7 +69,6 @@ public class SongsActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refreshLibrary();
-        refreshSaveButton();
     }
 
     private Uri sessionUri() {
@@ -148,8 +127,7 @@ public class SongsActivity extends Activity {
                 Session.set(loaded.toString(), song);
                 remember(loaded, song);
                 refreshLibrary();
-                refreshSaveButton();
-                status("解析完成：" + song.notes.size() + " 个音符，"
+                        status("解析完成：" + song.notes.size() + " 个音符，"
                         + (song.lengthMs / 1000) + " 秒。已选为当前曲目，返回即可演奏。");
             }
 
@@ -175,30 +153,6 @@ public class SongsActivity extends Activity {
         int low = 127;
         for (int i = 0; i < notes.size(); i++) low = Math.min(low, notes.get(i).midi);
         return low;
-    }
-
-    // ------------------------------------------------------------------ snapshot
-
-    private void saveSnapshot() {
-        SongLoader.Song song = Session.song();
-        String uri = Session.uri();
-        if (song == null || uri == null) {
-            status("还没有可保存的内容，先导入并解析一首曲子。");
-            return;
-        }
-        boolean ok = SongCache.save(this, uri, song, AppPrefs.getKey(this),
-                AppPrefs.getBpm(this), AppPrefs.getUseZeroPad(this), AppPrefs.getChordLimit(this));
-        refreshLibrary();
-        status(ok
-                ? "已存档：" + SongLoader.displayName(this, Uri.parse(uri))
-                        + "（" + song.notes.size() + " 个音符）\n"
-                        + "以后点这一首会直接读存档播放，不再解析原文件。"
-                : "保存失败，请重试。");
-    }
-
-    private void refreshSaveButton() {
-        boolean has = Session.song() != null && Session.uri() != null;
-        btnSave.setEnabled(has);
     }
 
     // ------------------------------------------------------------------ list
@@ -257,8 +211,7 @@ public class SongsActivity extends Activity {
                     SongCache.remove(SongsActivity.this, entry.uri);
                     if (entry.uri.equals(Session.uri())) Session.clear();
                     refreshLibrary();
-                    refreshSaveButton();
-                    status("已从列表移除（含存档）：" + entry.name);
+                                status("已从列表移除（含存档）：" + entry.name);
                     return true;
                 }
             });

@@ -5,13 +5,6 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
-import android.widget.Button;
-import android.widget.CheckBox;
-import android.widget.CompoundButton;
-import android.widget.EditText;
-import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -19,20 +12,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Settings screen: permissions, calibration, and the playback parameters.
+ * Settings screen: permissions and calibration only.
  *
- * <p>Split out of the single original screen so the play screen only shows what is needed to start a
- * run. Parameters are written to {@link AppPrefs} when this screen pauses, which is why the play
- * screen can read them without any direct coupling.
+ * <p>Playback parameters (key, BPM, speed, chord limit, octave) live on the play screen, directly
+ * under the current song title, because that is where they are actually adjusted - tweaking them and
+ * watching the preview update in place beats bouncing to another screen. This screen keeps the
+ * things you set once.
  */
 public class SettingsActivity extends Activity {
 
     private TextView tvPerms;
-    private Spinner spKey;
-    private Spinner spChord;
-    private EditText etBpm;
-    private EditText etSpeed;
-    private CheckBox cbZero;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,28 +30,6 @@ public class SettingsActivity extends Activity {
         setTitle("设置");
 
         tvPerms = (TextView) findViewById(R.id.tv_perms);
-        spKey = (Spinner) findViewById(R.id.sp_key);
-        spChord = (Spinner) findViewById(R.id.sp_chord);
-        etBpm = (EditText) findViewById(R.id.et_bpm);
-        etSpeed = (EditText) findViewById(R.id.et_speed);
-        cbZero = (CheckBox) findViewById(R.id.cb_zero);
-
-        ArrayAdapter<String> keys = new ArrayAdapter<String>(this,
-                android.R.layout.simple_spinner_item, KeyDetector.KEYS);
-        keys.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spKey.setAdapter(keys);
-
-        List<String> chords = new ArrayList<String>();
-        for (int i = 0; i < AppPrefs.MAX_CHORD_OPTIONS.length; i++) {
-            int n = AppPrefs.MAX_CHORD_OPTIONS[i];
-            chords.add(n + " 个键" + (n == AppPrefs.DEFAULT_CHORD ? "（默认）" : ""));
-        }
-        ArrayAdapter<String> chordAdapter = new ArrayAdapter<String>(this,
-                android.R.layout.simple_spinner_item, chords);
-        chordAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spChord.setAdapter(chordAdapter);
-
-        loadFromPrefs();
 
         findViewById(R.id.btn_overlay).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -98,52 +65,6 @@ public class SettingsActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refreshPermissions();
-        loadFromPrefs();
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        saveToPrefs();
-    }
-
-    private void loadFromPrefs() {
-        String key = AppPrefs.getKey(this);
-        for (int i = 0; i < KeyDetector.KEYS.length; i++) {
-            if (KeyDetector.KEYS[i].equals(key)) spKey.setSelection(i);
-        }
-        int chord = AppPrefs.getChordLimit(this);
-        for (int i = 0; i < AppPrefs.MAX_CHORD_OPTIONS.length; i++) {
-            if (AppPrefs.MAX_CHORD_OPTIONS[i] == chord) spChord.setSelection(i);
-        }
-        etBpm.setText(String.valueOf(AppPrefs.getBpm(this)));
-        etSpeed.setText(String.valueOf(AppPrefs.getSpeed(this)));
-        cbZero.setChecked(AppPrefs.getUseZeroPad(this));
-    }
-
-    private void saveToPrefs() {
-        int keyIndex = spKey.getSelectedItemPosition();
-        if (keyIndex >= 0 && keyIndex < KeyDetector.KEYS.length) {
-            AppPrefs.setKey(this, KeyDetector.KEYS[keyIndex]);
-        }
-        int chordIndex = spChord.getSelectedItemPosition();
-        if (chordIndex >= 0 && chordIndex < AppPrefs.MAX_CHORD_OPTIONS.length) {
-            AppPrefs.setChordLimit(this, AppPrefs.MAX_CHORD_OPTIONS[chordIndex]);
-        }
-        AppPrefs.setBpm(this, (int) number(etBpm.getText().toString(), 90f, 20f, 400f));
-        AppPrefs.setSpeed(this, number(etSpeed.getText().toString(), 1.0f, 0.25f, 4.0f));
-        AppPrefs.setUseZeroPad(this, cbZero.isChecked());
-    }
-
-    private static float number(String text, float fallback, float min, float max) {
-        try {
-            float v = Float.parseFloat(text.trim());
-            if (v < min) v = min;
-            if (v > max) v = max;
-            return v;
-        } catch (RuntimeException e) {
-            return fallback;
-        }
     }
 
     private void refreshPermissions() {

@@ -6,9 +6,14 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -34,6 +39,11 @@ public class MainActivity extends Activity {
     private TextView tvStatus;
     private TextView tvPreview;
     private Spinner spMode;
+    private Spinner spKey;
+    private Spinner spChord;
+    private EditText etBpm;
+    private EditText etSpeed;
+    private CheckBox cbZero;
     private Button btnPlay;
 
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -68,6 +78,21 @@ public class MainActivity extends Activity {
 
             @Override
             public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+
+        setupParams();
+
+        findViewById(R.id.btn_reparse).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                manualParse();
+            }
+        });
+        findViewById(R.id.btn_save).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                manualSave();
             }
         });
 
@@ -108,6 +133,7 @@ public class MainActivity extends Activity {
         super.onResume();
         if (Session.version() != shownVersion) {
             shownVersion = Session.version();
+            syncParamsFromPrefs();
             refreshSong();
         }
     }
@@ -115,15 +141,21 @@ public class MainActivity extends Activity {
     // ------------------------------------------------------------------ display
 
     private void refreshSong() {
-        SongLoader.Song song = Session.song();
-        if (song == null) {
+        if (Session.song() == null) {
             tvSong.setText("还没有选择曲目");
             tvPreview.setText("");
             return;
         }
-        tvSong.setText(song.name + "\n" + song.notes.size() + " 个音符 · "
-                + song.lengthMs / 1000 + " 秒 · " + AppPrefs.getKey(this) + " 调");
+        refreshSongTitle();
         renderPreview();
+    }
+
+    private void refreshSongTitle() {
+        SongLoader.Song song = Session.song();
+        if (song == null) return;
+        tvSong.setText(song.name + "\n" + song.notes.size() + " 个音符 · "
+                + song.lengthMs / 1000 + " 秒 · " + AppPrefs.getKey(this) + " 调 · 和弦上限 "
+                + AppPrefs.getChordLimit(this));
     }
 
     /** Draws the pad sequence for the settings currently stored in {@link AppPrefs}. */
@@ -281,6 +313,161 @@ public class MainActivity extends Activity {
         Playback.stop();
         OverlayController.hideStopButton();
         setStatus("已停止。");
+    }
+
+
+    // ------------------------------------------------------------------ playback parameters
+
+    /** Wires the parameter controls that sit right under the song title. */
+    private void setupParams() {
+        spKey = (Spinner) findViewById(R.id.sp_key);
+        spChord = (Spinner) findViewById(R.id.sp_chord);
+        etBpm = (EditText) findViewById(R.id.et_bpm);
+        etSpeed = (EditText) findViewById(R.id.et_speed);
+        cbZero = (CheckBox) findViewById(R.id.cb_zero);
+
+        ArrayAdapter<String> keys = new ArrayAdapter<String>(this,
+                android.R.layout.simple_spinner_item, KeyDetector.KEYS);
+        keys.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spKey.setAdapter(keys);
+
+        List<String> chords = new ArrayList<String>();
+        for (int i = 0; i < AppPrefs.MAX_CHORD_OPTIONS.length; i++) {
+            int n = AppPrefs.MAX_CHORD_OPTIONS[i];
+            chords.add(n + " 个键" + (n == AppPrefs.DEFAULT_CHORD ? "（默认）" : ""));
+        }
+        ArrayAdapter<String> chordAdapter = new ArrayAdapter<String>(this,
+                android.R.layout.simple_spinner_item, chords);
+        chordAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spChord.setAdapter(chordAdapter);
+
+        spKey.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                AppPrefs.setKey(MainActivity.this, KeyDetector.KEYS[position]);
+                onParamsChanged();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+        spChord.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                AppPrefs.setChordLimit(MainActivity.this, AppPrefs.MAX_CHORD_OPTIONS[position]);
+                onParamsChanged();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+        cbZero.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                AppPrefs.setUseZeroPad(MainActivity.this, isChecked);
+                onParamsChanged();
+            }
+        });
+        TextWatcher watcher = new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                AppPrefs.setBpm(MainActivity.this,
+                        (int) number(etBpm.getText().toString(), 90f, 20f, 400f));
+                AppPrefs.setSpeed(MainActivity.this,
+                        number(etSpeed.getText().toString(), 1.0f, 0.25f, 4.0f));
+                onParamsChanged();
+            }
+        };
+        etBpm.addTextChangedListener(watcher);
+        etSpeed.addTextChangedListener(watcher);
+
+        syncParamsFromPrefs();
+    }
+
+    /** Pushes stored parameters into the controls (called on load, including snapshot restores). */
+    private void syncParamsFromPrefs() {
+        String key = AppPrefs.getKey(this);
+        for (int i = 0; i < KeyDetector.KEYS.length; i++) {
+            if (KeyDetector.KEYS[i].equals(key)) spKey.setSelection(i);
+        }
+        int chord = AppPrefs.getChordLimit(this);
+        for (int i = 0; i < AppPrefs.MAX_CHORD_OPTIONS.length; i++) {
+            if (AppPrefs.MAX_CHORD_OPTIONS[i] == chord) spChord.setSelection(i);
+        }
+        String bpm = String.valueOf(AppPrefs.getBpm(this));
+        if (!bpm.equals(etBpm.getText().toString())) etBpm.setText(bpm);
+        String speed = String.valueOf(AppPrefs.getSpeed(this));
+        if (!speed.equals(etSpeed.getText().toString())) etSpeed.setText(speed);
+        cbZero.setChecked(AppPrefs.getUseZeroPad(this));
+    }
+
+    /** The preview is the point of editing these in place, so redraw it on every change. */
+    private void onParamsChanged() {
+        refreshSongTitle();
+        renderPreview();
+    }
+
+    private static float number(String text, float fallback, float min, float max) {
+        try {
+            float v = Float.parseFloat(text.trim());
+            if (v < min) v = min;
+            if (v > max) v = max;
+            return v;
+        } catch (RuntimeException e) {
+            return fallback;
+        }
+    }
+
+    // ------------------------------------------------------------------ parse and save
+
+    /** Re-parses the current song's source file with the parameters now on screen. */
+    private void manualParse() {
+        final String uri = Session.uri();
+        if (uri == null) {
+            setStatus("当前曲目没有对应的原始文件。到【曲目库】导入一个文件。");
+            return;
+        }
+        setStatus("正在重新解析 " + currentName() + " …");
+        Loader.load(this, android.net.Uri.parse(uri), new Loader.Callback() {
+            @Override
+            public void onLoaded(android.net.Uri loaded, SongLoader.Song song) {
+                Session.set(loaded.toString(), song);
+                shownVersion = Session.version();
+                refreshSong();
+                setStatus("已按当前参数重新解析：" + song.notes.size() + " 个音符。");
+            }
+
+            @Override
+            public void onError(android.net.Uri failed, Throwable error) {
+                setStatus("重新解析失败：" + Loader.describe(error));
+            }
+        });
+    }
+
+    /** Stores the parsed notes plus the settings on screen, so this song never parses again. */
+    private void manualSave() {
+        SongLoader.Song song = Session.song();
+        String uri = Session.uri();
+        if (song == null || uri == null) {
+            setStatus("还没有可保存的内容。到【曲目库】导入并解析一首曲子。");
+            return;
+        }
+        boolean ok = SongCache.save(this, uri, song, AppPrefs.getKey(this),
+                AppPrefs.getBpm(this), AppPrefs.getUseZeroPad(this), AppPrefs.getChordLimit(this));
+        setStatus(ok
+                ? "已存档：" + song.name + "（" + song.notes.size() + " 个音符）\n"
+                        + "以后选这一首会直接读存档播放，不再解析原文件。"
+                : "保存失败，请重试。");
     }
 
     // ------------------------------------------------------------------ sequence / random
