@@ -53,6 +53,7 @@ app/src/com/handpan/autoplay/
 ├── SongLibrary.java               # 已导入曲目（含持久化 URI 权限）
 ├── SongCache.java                 # 解析结果存档（Android 存储层）
 ├── SnapshotCodec.java             # 存档格式读写（纯 Java，可测）
+├── AutoDetect.java                # 自动模式：识调 + 识速并写回设定
 ├── KeyDetector.java               # 自动识调（12 个调）
 ├── TempoEstimator.java            # 自动识速（从起音间隔推断 BPM）
 ├── ScaleMapper.java               # 音高 → 简谱音级
@@ -66,6 +67,11 @@ app/src/com/handpan/autoplay/
 三个 Activity 之间没有直接引用：当前曲目放在 `Session`（进程内单例，`version()` 自增供各页判断是否要刷新），
 演奏参数放在 `AppPrefs`（演奏页控件改动即写回，并立即重画预览）。演奏页 `onResume` 比对 `Session.version()`，
 变了才同步控件并重画。任一页都可以独立改动，不牵动其它页。
+
+**两种解析模式**：`AutoDetect.apply()` 是"自动模式"的唯一入口（导入文件与【自动解析】按钮都走它），
+识别调性与曲速并覆盖设定。【手动解析】刻意不调用它——它不碰 `AppPrefs`，只把文件按当前 BPM 重新解析一遍，
+因此你的设定一定留得住。对简谱文本来说 BPM 直接决定时值，所以两种模式的结果确实不同；
+对 MIDI / 音频来说差别在于"调性有没有被识别结果覆盖"。
 
 **参数为什么放在演奏页**：调性和弦上限这些是会边调边看的，放在曲目名下面改动即时反映到预览，
 比"跳到设置页改完再退回来"直接得多。设置页只留一次配好就不再动的东西（权限、校准）。

@@ -100,6 +100,13 @@
             android:orientation="horizontal">
 
             <Button
+                android:id="@+id/btn_auto_parse"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="自动解析" />
+
+            <Button
                 android:id="@+id/btn_reparse"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"

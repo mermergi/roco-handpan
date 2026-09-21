@@ -92,6 +92,12 @@ public class MainActivity extends Activity {
 
         setupParams();
 
+        findViewById(R.id.btn_auto_parse).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                autoParse();
+            }
+        });
         findViewById(R.id.btn_reparse).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -519,28 +525,76 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------------ parse and save
 
-    /** Re-parses the current song's source file with the parameters now on screen. */
+    /**
+     * 自动解析：识别调性与曲速，并用识别结果覆盖当前设定。
+     *
+     * <p>导入文件走的也是这条路。之所以单独做成按钮，是因为你随时可能想"回到自动"——
+     * 手动改过调性之后，只有这个按钮能把它交还给自动识别。
+     */
+    private void autoParse() {
+        final String uri = Session.uri();
+        if (uri == null) {
+            setStatus("当前曲目没有对应的原始文件。到【曲目库】导入一个文件。");
+            return;
+        }
+        setStatus("正在自动解析 " + currentName() + " …（自动识调 + 自动识速，会覆盖当前设定）");
+        Loader.load(this, android.net.Uri.parse(uri), new Loader.Callback() {
+            @Override
+            public void onLoaded(android.net.Uri loaded, SongLoader.Song song) {
+                applyAutoDetection(song);
+                Session.set(loaded.toString(), song);
+                shownVersion = Session.version();
+                syncParamsFromPrefs();
+                refreshSong();
+                setStatus("已自动解析：" + song.notes.size() + " 个音符"
+                        + "\n自动识别调性：" + AppPrefs.getKey(MainActivity.this)
+                        + "　曲速约 " + AppPrefs.getBpm(MainActivity.this) + " BPM"
+                        + "\n（想固定成自己的设定，改好参数后按【手动解析】）");
+            }
+
+            @Override
+            public void onError(android.net.Uri failed, Throwable error) {
+                setStatus("自动解析失败：" + Loader.describe(error));
+            }
+        });
+    }
+
+    /**
+     * 手动解析：完全按首页上当前的设定来，不做任何自动识别。
+     *
+     * <p>与自动解析的区别就在这一步——自动会被识别结果覆盖，手动则保留你设的调性和 BPM。
+     * 对简谱文本来说 BPM 会直接改变时值，所以两种模式的结果是真的不一样。
+     */
     private void manualParse() {
         final String uri = Session.uri();
         if (uri == null) {
             setStatus("当前曲目没有对应的原始文件。到【曲目库】导入一个文件。");
             return;
         }
-        setStatus("正在重新解析 " + currentName() + " …");
+        final String key = AppPrefs.getKey(this);
+        final int bpm = AppPrefs.getBpm(this);
+        setStatus("正在按当前设定解析 " + currentName() + " …（保持 " + key + " 调 / " + bpm
+                + " BPM，不自动识别）");
         Loader.load(this, android.net.Uri.parse(uri), new Loader.Callback() {
             @Override
             public void onLoaded(android.net.Uri loaded, SongLoader.Song song) {
                 Session.set(loaded.toString(), song);
                 shownVersion = Session.version();
                 refreshSong();
-                setStatus("已按当前参数重新解析：" + song.notes.size() + " 个音符。");
+                setStatus("已按当前设定解析：" + song.notes.size() + " 个音符"
+                        + "\n调性 " + key + "　BPM " + bpm + "　（未自动识别）");
             }
 
             @Override
             public void onError(android.net.Uri failed, Throwable error) {
-                setStatus("重新解析失败：" + Loader.describe(error));
+                setStatus("手动解析失败：" + Loader.describe(error));
             }
         });
+    }
+
+    /** Runs key and tempo detection and writes the results into the settings. */
+    private void applyAutoDetection(SongLoader.Song song) {
+        AutoDetect.apply(this, song.notes);
     }
 
     /** Stores the parsed notes plus the settings on screen, so this song never parses again. */
