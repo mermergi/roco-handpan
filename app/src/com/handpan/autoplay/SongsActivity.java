@@ -1,12 +1,18 @@
 package com.handpan.autoplay;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -55,6 +61,12 @@ public class SongsActivity extends Activity {
                 pickFile();
             }
         });
+        findViewById(R.id.btn_url).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                askForLink();
+            }
+        });
         findViewById(R.id.btn_clear_library).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -94,6 +106,73 @@ public class SongsActivity extends Activity {
         }
     }
 
+    /**
+     * Imports from a pasted link instead of a file picker.
+     *
+     * <p>Score sites share <em>pages</em>, not files, and a phone browser makes downloading a MIDI
+     * needlessly awkward - so the link is the natural unit of sharing here. The box pre-fills from
+     * the clipboard when the clipboard already holds a link the app understands, which is the
+     * common case: copy in the browser, switch back, tap 导入.
+     */
+    private void askForLink() {
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        input.setHint("https://…");
+        input.setSingleLine(false);
+        int pad = Ui.dp(this, 16);
+        input.setPadding(pad, Ui.dp(this, 12), pad, 0);
+
+        String clip = clipboardText();
+        if (clip != null && ScoreLink.resolve(clip) != null) input.setText(clip);
+
+        new AlertDialog.Builder(this)
+                .setTitle("从链接导入")
+                .setMessage("粘贴曲谱页面的分享链接，或直接指向 mid / midi / wav / mp3 / txt 的链接。")
+                .setView(input)
+                .setPositiveButton("导入", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        importFromLink(input.getText().toString());
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void importFromLink(String link) {
+        if (link == null || link.trim().length() == 0) {
+            status("先把链接粘进来。");
+            return;
+        }
+        status("正在下载 " + link.trim() + " …");
+        UrlImporter.fetch(this, link, new UrlImporter.Callback() {
+            @Override
+            public void onReady(Uri uri, String name) {
+                status("已下载 " + name + "，正在解析 …");
+                parse(uri, true);
+            }
+
+            @Override
+            public void onError(String message) {
+                status("导入失败：" + message);
+            }
+        });
+    }
+
+    /** Best effort: Android 10+ may refuse a clipboard read, which only costs a pre-filled box. */
+    private String clipboardText() {
+        try {
+            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm == null || !cm.hasPrimaryClip()) return null;
+            ClipData clip = cm.getPrimaryClip();
+            if (clip == null || clip.getItemCount() == 0) return null;
+            CharSequence text = clip.getItemAt(0).coerceToText(this);
+            return text == null ? null : text.toString();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -119,12 +198,10 @@ public class SongsActivity extends Activity {
             @Override
             public void onLoaded(Uri loaded, SongLoader.Song song) {
                 currentUri = loaded;
-                if (autoDetect) {
-                    List<RawNote> mono = SongLoader.monophonic(song.notes);
-                    AppPrefs.setKey(SongsActivity.this, KeyDetector.bestKeyName(mono));
-                    int bpm = TempoEstimator.estimate(mono);
-                    if (bpm > 0) AppPrefs.setBpm(SongsActivity.this, bpm);
-                }
+                // Same entry point as the play screen's 自动解析, so the two can never disagree.
+                // This used to be an inline copy that fed the key detector the melody line only,
+                // which detects the wrong key whenever the melody omits fa and ti.
+                if (autoDetect) AutoDetect.apply(SongsActivity.this, song.notes);
                 Session.set(loaded.toString(), song);
                 remember(loaded, song);
                 refreshLibrary();

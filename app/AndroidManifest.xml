@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.handpan.autoplay"
-    android:versionCode="27"
-    android:versionName="3.6">
+    android:versionCode="28"
+    android:versionName="3.7">
 
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="32" />
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- Only used by 【从链接导入】: the user pastes a score link and the app fetches that one file.
+         Nothing else in the app touches the network. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:allowBackup="false"

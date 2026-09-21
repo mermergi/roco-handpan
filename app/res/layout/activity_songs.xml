@@ -16,6 +16,13 @@
             android:layout_height="wrap_content"
             android:text="选择音乐文件（MIDI / MP3 / WAV / 简谱txt）" />
 
+        <Button
+            android:id="@+id/btn_url"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="从链接导入（曲谱分享链接 / 直链）" />
+
         <TextView
             android:id="@+id/tv_status"
             android:layout_width="match_parent"

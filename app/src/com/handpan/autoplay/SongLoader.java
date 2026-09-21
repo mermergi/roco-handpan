@@ -110,6 +110,12 @@ public final class SongLoader {
     }
 
     public static String displayName(Context ctx, Uri uri) {
+        // Files this app downloaded itself have no content provider behind them; asking the resolver
+        // about a file:// URI is at best a thrown exception and at worst a crash on some OEM builds.
+        if ("file".equals(uri.getScheme())) {
+            String last = uri.getLastPathSegment();
+            return last == null ? "unknown" : last;
+        }
         Cursor c = null;
         try {
             c = ctx.getContentResolver().query(uri, null, null, null, null);
