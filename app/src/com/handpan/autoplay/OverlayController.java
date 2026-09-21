@@ -14,6 +14,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
@@ -31,6 +32,7 @@ public final class OverlayController {
 
     private static View sCalView;
     private static View sStopView;
+    private static TextView sPauseView;
     private static WindowManager sWm;
     private static int sSlot;
 
@@ -182,20 +184,130 @@ public final class OverlayController {
         return sCalView != null;
     }
 
-    // ---------------------------------------------------------------- stop button
+    // ---------------------------------------------------------------- floating transport bar
 
-    /** Shows a small draggable stop button on top of the game. */
-    public static void showStopButton(Context context, final Runnable onStop) {
-        hideStopButton();
+    /** What the floating bar's buttons do. Implemented by the play screen. */
+    public interface Transport {
+        void onPrevious();
+
+        /** Pause if playing, resume if paused. */
+        void onPauseResume();
+
+        void onNext();
+
+        void onStop();
+    }
+
+    /** Shows a draggable bar with previous / pause / next / stop, on top of the game. */
+    public static void showTransport(Context context, final Transport transport) {
         final Context ctx = context.getApplicationContext();
         if (!canDraw(ctx)) return;
 
-        final TextView btn = new TextView(ctx);
-        btn.setText("■ 停止");
-        btn.setTextColor(Color.WHITE);
-        btn.setBackgroundColor(0xCCB00020);
-        btn.setTextSize(15f);
-        btn.setPadding(dp(ctx, 16), dp(ctx, 10), dp(ctx, 16), dp(ctx, 10));
+        LinearLayout bar = new LinearLayout(ctx);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setBackgroundResource(R.drawable.overlay_bar);
+        int pad = dp(ctx, 6);
+        bar.setPadding(pad, pad, pad, pad);
+
+        // A dedicated handle, because a button would swallow the drag gesture.
+        TextView handle = new TextView(ctx);
+        handle.setText("≡");
+        handle.setTextColor(0xFFB0BEC5);
+        handle.setTextSize(18f);
+        handle.setGravity(Gravity.CENTER);
+        handle.setPadding(dp(ctx, 10), dp(ctx, 8), dp(ctx, 10), dp(ctx, 8));
+        bar.addView(handle);
+
+        bar.addView(barButton(ctx, "上一首", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                transport.onPrevious();
+            }
+        }));
+
+        sPauseView = barButton(ctx, "暂停", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                transport.onPauseResume();
+            }
+        });
+        bar.addView(sPauseView);
+
+        bar.addView(barButton(ctx, "下一首", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                transport.onNext();
+            }
+        }));
+
+        TextView stop = barButton(ctx, "停止", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                transport.onStop();
+            }
+        });
+        stop.setTextColor(0xFFFF8A80);
+        bar.addView(stop);
+
+        showBar(ctx, bar, handle, sPauseView);
+    }
+
+    /** Single draggable stop button, for screens that only need to interrupt something. */
+    public static void showStopButton(Context context, final Runnable onStop) {
+        final Context ctx = context.getApplicationContext();
+        if (!canDraw(ctx)) return;
+
+        LinearLayout bar = new LinearLayout(ctx);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setBackgroundResource(R.drawable.overlay_bar);
+        int pad = dp(ctx, 6);
+        bar.setPadding(pad, pad, pad, pad);
+
+        TextView handle = new TextView(ctx);
+        handle.setText("≡");
+        handle.setTextColor(0xFFB0BEC5);
+        handle.setTextSize(18f);
+        handle.setGravity(Gravity.CENTER);
+        handle.setPadding(dp(ctx, 10), dp(ctx, 8), dp(ctx, 10), dp(ctx, 8));
+        bar.addView(handle);
+
+        TextView stop = barButton(ctx, "停止", new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (onStop != null) onStop.run();
+            }
+        });
+        stop.setTextColor(0xFFFF8A80);
+        bar.addView(stop);
+
+        showBar(ctx, bar, handle, null);
+    }
+
+    /** Updates the middle button's label to match the play/pause state. */
+    public static void setPaused(boolean paused) {
+        if (sPauseView != null) sPauseView.setText(paused ? "继续" : "暂停");
+    }
+
+    private static TextView barButton(Context ctx, String text, View.OnClickListener click) {
+        TextView view = new TextView(ctx);
+        view.setText(text);
+        view.setTextColor(Color.WHITE);
+        view.setTextSize(14f);
+        view.setGravity(Gravity.CENTER);
+        view.setBackgroundResource(R.drawable.overlay_button);
+        view.setPadding(dp(ctx, 14), dp(ctx, 9), dp(ctx, 14), dp(ctx, 9));
+        view.setOnClickListener(click);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(dp(ctx, 3), 0, dp(ctx, 3), 0);
+        view.setLayoutParams(params);
+        return view;
+    }
+
+    /** Adds the bar as an overlay window; dragging happens on the handle. */
+    private static void showBar(final Context ctx, final View bar, final View handle,
+                                final TextView pauseView) {
+        hideStopButton();
 
         int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                 ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -208,10 +320,10 @@ public final class OverlayController {
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.TOP | Gravity.START;
-        lp.x = dp(ctx, 12);
-        lp.y = dp(ctx, 40);
+        lp.x = dp(ctx, 10);
+        lp.y = dp(ctx, 36);
 
-        btn.setOnTouchListener(new View.OnTouchListener() {
+        handle.setOnTouchListener(new View.OnTouchListener() {
             float downX, downY;
             int startX, startY;
 
@@ -228,15 +340,8 @@ public final class OverlayController {
                         lp.x = startX + (int) (e.getRawX() - downX);
                         lp.y = startY + (int) (e.getRawY() - downY);
                         try {
-                            sWm.updateViewLayout(btn, lp);
+                            sWm.updateViewLayout(bar, lp);
                         } catch (RuntimeException ignored) {
-                        }
-                        return true;
-                    case MotionEvent.ACTION_UP:
-                        float dx = Math.abs(e.getRawX() - downX);
-                        float dy = Math.abs(e.getRawY() - downY);
-                        if (dx < dp(ctx, 12) && dy < dp(ctx, 12) && onStop != null) {
-                            onStop.run();
                         }
                         return true;
                     default:
@@ -245,9 +350,10 @@ public final class OverlayController {
             }
         });
 
-        sStopView = btn;
+        sStopView = bar;
+        sPauseView = pauseView;
         try {
-            wm(ctx).addView(btn, lp);
+            wm(ctx).addView(bar, lp);
         } catch (RuntimeException e) {
             sStopView = null;
         }
@@ -256,6 +362,7 @@ public final class OverlayController {
     public static void hideStopButton() {
         View v = sStopView;
         sStopView = null;
+        sPauseView = null;
         if (v != null && sWm != null) {
             try {
                 sWm.removeView(v);

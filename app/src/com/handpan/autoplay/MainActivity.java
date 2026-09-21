@@ -253,12 +253,8 @@ public class MainActivity extends Activity {
 
     /** Runs the countdown, then starts playback. Used both by 【开始演奏】 and chained playback. */
     private void startCountdown() {
-        OverlayController.showStopButton(this, new Runnable() {
-            @Override
-            public void run() {
-                stop();
-            }
-        });
+        OverlayController.showTransport(this, transport());
+        OverlayController.setPaused(false);
         countdownLeft = COUNTDOWN_SEC;
         setStatus("准备演奏：" + currentName() + "　请切到游戏！");
         ui.post(new Runnable() {
@@ -270,18 +266,96 @@ public class MainActivity extends Activity {
                     countdownLeft--;
                     ui.postDelayed(this, 1000L);
                 } else {
-                    List<Playback.Tap> taps = buildTaps();
-                    if (taps.isEmpty()) {
-                        OverlayController.hideStopButton();
-                        setStatus("没有可弹奏的音符。");
-                        return;
-                    }
-                    setStatus("演奏中…（" + taps.size() + " 次点击，" + modeDescription()
-                            + "，点悬浮【停止】可中断）");
-                    Playback.start(taps, playbackListener());
+                    startNow();
                 }
             }
         });
+    }
+
+    /** Starts playing the current song immediately, with no countdown. */
+    private void startNow() {
+        List<Playback.Tap> taps = buildTaps();
+        if (taps.isEmpty()) {
+            OverlayController.hideStopButton();
+            setStatus("没有可弹奏的音符。");
+            return;
+        }
+        if (!HandpanAccessibilityService.isReady()) {
+            OverlayController.hideStopButton();
+            setStatus("无障碍服务未开启，无法弹奏。");
+            return;
+        }
+        OverlayController.setPaused(false);
+        setStatus("演奏中…（" + taps.size() + " 次点击，" + modeDescription() + "）");
+        Playback.start(taps, playbackListener());
+    }
+
+    /** Floating bar callbacks: previous / pause-resume / next / stop. */
+    private OverlayController.Transport transport() {
+        return new OverlayController.Transport() {
+            @Override
+            public void onPrevious() {
+                switchSong(-1);
+            }
+
+            @Override
+            public void onPauseResume() {
+                if (Playback.isPaused()) {
+                    Playback.resume();
+                    OverlayController.setPaused(false);
+                    setStatus("已继续：" + currentName());
+                } else {
+                    Playback.pause();
+                    OverlayController.setPaused(true);
+                    setStatus("已暂停。点悬浮【继续】恢复，【下一首】换歌。");
+                }
+            }
+
+            @Override
+            public void onNext() {
+                switchSong(1);
+            }
+
+            @Override
+            public void onStop() {
+                stop();
+            }
+        };
+    }
+
+    /**
+     * Jumps to the previous or next song in the library.
+     *
+     * <p>Unlike the automatic chaining after a finished run, this starts as soon as the song is
+     * ready: the user pressed the button from inside the game, so making them wait through another
+     * countdown would just be in the way.
+     */
+    private void switchSong(int delta) {
+        List<SongLibrary.Entry> entries = SongLibrary.list(this);
+        if (entries.isEmpty()) {
+            setStatus("曲目库是空的，先到【曲目库】导入曲子。");
+            return;
+        }
+        String current = Session.uri();
+        int index = -1;
+        for (int i = 0; i < entries.size(); i++) {
+            if (entries.get(i).uri.equals(current)) {
+                index = i;
+                break;
+            }
+        }
+        int target;
+        if (index < 0) {
+            target = 0;
+        } else {
+            target = ((index + delta) % entries.size() + entries.size()) % entries.size();
+        }
+        Playback.stop();
+        ui.removeCallbacksAndMessages(null);
+        OverlayController.hideStopButton();
+        SongLibrary.Entry entry = entries.get(target);
+        setStatus((delta < 0 ? "上一首：" : "下一首：") + entry.name + " …");
+        loadForChain(entry, false);
     }
 
     private Playback.Listener playbackListener() {
@@ -500,18 +574,22 @@ public class MainActivity extends Activity {
         SongLibrary.Entry entry = entries.get(next);
         setStatus((mode == AppPrefs.MODE_RANDOM ? "随机" : "顺序")
                 + "演奏下一首：" + entry.name + " …");
-        loadForChain(entry);
+        loadForChain(entry, true);
     }
 
     /** Loads a song for chained playback, preferring its snapshot, then starts the countdown. */
-    private void loadForChain(final SongLibrary.Entry entry) {
+    private void loadForChain(final SongLibrary.Entry entry, final boolean withCountdown) {
         SongCache.Snapshot snapshot = SongCache.load(this, entry.uri);
         if (snapshot != null) {
             applySnapshot(entry.uri, snapshot);
             shownVersion = Session.version();
             refreshSong();
-            setStatus("下一首（来自存档）：" + snapshot.song.name + "　准备演奏…");
-            startCountdown();
+            if (withCountdown) {
+                setStatus("下一首（来自存档）：" + snapshot.song.name + "　准备演奏…");
+                startCountdown();
+            } else {
+                startNow();
+            }
             return;
         }
         setStatus("下一首：" + entry.name + " 还没存档，正在解析…（在【曲目库】按【手动保存】可免去这一步）");
@@ -521,8 +599,12 @@ public class MainActivity extends Activity {
                 Session.set(uri.toString(), song);
                 shownVersion = Session.version();
                 refreshSong();
-                setStatus("下一首：" + song.name + "　准备演奏…");
-                startCountdown();
+                if (withCountdown) {
+                    setStatus("下一首：" + song.name + "　准备演奏…");
+                    startCountdown();
+                } else {
+                    startNow();
+                }
             }
 
             @Override

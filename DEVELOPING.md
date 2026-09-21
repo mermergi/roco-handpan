@@ -40,8 +40,9 @@ app/src/com/handpan/autoplay/
 ├── Loader.java                    # 后台解析 + 回主线程回调
 ├── Ui.java                        # 共用小工具
 ├── HandpanAccessibilityService.java  # 注入手势（核心能力）
-├── OverlayController.java         # 悬浮校准层 + 悬浮停止按钮
-├── Playback.java                  # 实时调度，按毫秒派发
+├── OverlayController.java         # 悬浮校准层 + 悬浮控制条（上一首/暂停/下一首/停止）
+├── Playback.java                  # 实时调度，按毫秒派发（暂停/继续）
+├── ScheduleClock.java             # 播放计时（纯 Java，可测）
 ├── TapPlanner.java                # 音符 → 琴键点击计划（含和弦分组）
 ├── MidiParser.java                # SMF 解析（tempo map / running status / SMPTE）
 ├── PitchDetector.java             # YIN 音高检测（音频 → 音符）
@@ -132,6 +133,7 @@ YIN 是**单音**检测器，喂整首混音会锁到贝斯和底鼓。分析频
 | 和弦分组（do-mi-sol → 一次三指；同键不重复按；上限 1/4/6/9 均生效；0 或负数按 1 处理） | PASS 8/8 |
 | 点击计划（单个音也必须有输出——曾因整数溢出恒为空） | PASS |
 | 存档格式（500/3000 音符往返一致、版本不符/缺头/空内容返回 null、坏行跳过、换行清洗） | PASS 11/11 |
+| 播放计时（暂停期间时间冻结、继续从冻结点接续、连续 5 次暂停/继续不漂移、reset 清零） | PASS 22/22 |
 | APK 打包合规（resources.arsc 不压缩 + 4 字节对齐） | PASS |
 
 `SongLibrary` 依赖 Android 的 SharedPreferences 与 org.json，无法在纯 JVM 中测试，仅有编译与打包检查覆盖。

@@ -48,14 +48,33 @@ public final class Playback {
 
     private static List<Tap> sTaps;
     private static int sIndex;
-    private static boolean sRunning;
-    private static long sStartedAtUptime;
     private static Listener sListener;
+
+    /** Elapsed-time bookkeeping, including pauses. Pure logic so it can be unit tested. */
+    private static final ScheduleClock CLOCK = new ScheduleClock();
 
     private Playback() {}
 
     public static boolean isPlaying() {
-        return sRunning;
+        return CLOCK.isRunning();
+    }
+
+    /** True while playback is held: the schedule stops advancing until {@link #resume()}. */
+    public static synchronized boolean isPaused() {
+        return CLOCK.isPaused();
+    }
+
+    /** Freezes playback, remembering how far it had got. */
+    public static synchronized void pause() {
+        if (!CLOCK.isRunning() || CLOCK.isPaused()) return;
+        CLOCK.pause(SystemClock.uptimeMillis());
+        HANDLER.removeCallbacks(TICK);
+    }
+
+    public static synchronized void resume() {
+        if (!CLOCK.isPaused()) return;
+        CLOCK.resume(SystemClock.uptimeMillis());
+        HANDLER.postDelayed(TICK, TICK_MS);
     }
 
     public static int progressIndex() {
@@ -69,7 +88,8 @@ public final class Playback {
     private static final Runnable TICK = new Runnable() {
         @Override
         public void run() {
-            if (!sRunning) return;
+            if (!CLOCK.isRunning()) return;
+            if (CLOCK.isPaused()) return; // paused: do not reschedule
 
             HandpanAccessibilityService service = HandpanAccessibilityService.get();
             if (service == null) {
@@ -77,7 +97,7 @@ public final class Playback {
                 return;
             }
 
-            long elapsed = SystemClock.uptimeMillis() - sStartedAtUptime;
+            long elapsed = CLOCK.elapsed(SystemClock.uptimeMillis());
             int dispatched = 0;
             while (sIndex < sTaps.size()
                     && sTaps.get(sIndex).atMs <= elapsed
@@ -103,18 +123,17 @@ public final class Playback {
         sTaps = taps;
         sIndex = 0;
         sListener = listener;
-        sStartedAtUptime = SystemClock.uptimeMillis();
-        sRunning = true;
+        CLOCK.start(SystemClock.uptimeMillis());
         if (sListener != null) sListener.onProgress(0, taps.size());
         HANDLER.postDelayed(TICK, TICK_MS);
     }
 
     public static synchronized void stop() {
-        if (sRunning) finish(false);
+        if (CLOCK.isRunning()) finish(false);
     }
 
     private static void finish(boolean completed) {
-        sRunning = false;
+        CLOCK.reset();
         HANDLER.removeCallbacks(TICK);
         Listener l = sListener;
         sListener = null;
