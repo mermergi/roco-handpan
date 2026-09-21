@@ -23,6 +23,13 @@ public final class AppPrefs {
     private static final String K_BPM = "bpm";
     private static final String K_USE_ZERO = "use_zero";
     private static final String K_LAYOUT = "layout_version";
+    private static final String K_MODE = "play_mode";
+    private static final String K_CHORD = "chord_limit";
+
+    /** How many pads may be pressed together. The instrument has nine; more than that is moot. */
+    public static final int[] MAX_CHORD_OPTIONS = {1, 2, 3, 4, 5, 6, 9};
+
+    public static final int DEFAULT_CHORD = 4;
 
     /**
      * Bumped whenever the meaning of a calibration slot changes. The 9-pad octave layout replaced
@@ -147,5 +154,40 @@ public final class AppPrefs {
         clearCalibration(c);
         setLayoutVersion(c, LAYOUT_VERSION);
         return had;
+    }
+
+    // ---------------------------------------------------------------- play modes
+
+    /** Play just the selected song, then stop. */
+    public static final int MODE_SINGLE = 0;
+    /** After each song, continue with the next entry in the song list. */
+    public static final int MODE_SEQUENCE = 1;
+    /** After each song, continue with a random other entry. */
+    public static final int MODE_RANDOM = 2;
+
+    /** Labels for the mode spinner, indexed by the MODE_* constants. */
+    public static final String[] MODE_LABELS = {"单曲演奏", "顺序演奏（接下一首）", "随机演奏"};
+
+    public static int getPlayMode(Context c) {
+        return sp(c).getInt(K_MODE, MODE_SINGLE);
+    }
+
+    public static void setPlayMode(Context c, int mode) {
+        sp(c).edit().putInt(K_MODE, mode).apply();
+    }
+
+    /**
+     * Most pads pressed in one chord.
+     *
+     * <p>Raising this lets more of a chord through, at the cost of muddiness and of leaning on the
+     * gesture stroke limit. Bounded by {@link #MAX_CHORD_OPTIONS} and, at dispatch time, by
+     * {@code GestureDescription.getMaxStrokeCount()}.
+     */
+    public static int getChordLimit(Context c) {
+        return sp(c).getInt(K_CHORD, DEFAULT_CHORD);
+    }
+
+    public static void setChordLimit(Context c, int v) {
+        sp(c).edit().putInt(K_CHORD, v).apply();
     }
 }

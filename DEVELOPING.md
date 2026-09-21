@@ -33,7 +33,12 @@ python3 pack.py verify --apk handpan-autoplay.apk
 
 ```
 app/src/com/handpan/autoplay/
-├── MainActivity.java              # 单页 UI，串起全流程
+├── MainActivity.java              # 演奏页
+├── SongsActivity.java             # 曲目库页（导入 / 解析 / 保存 / 列表）
+├── SettingsActivity.java          # 设置页（权限 / 校准 / 演奏参数）
+├── Session.java                   # 三页共享的当前曲目
+├── Loader.java                    # 后台解析 + 回主线程回调
+├── Ui.java                        # 共用小工具
 ├── HandpanAccessibilityService.java  # 注入手势（核心能力）
 ├── OverlayController.java         # 悬浮校准层 + 悬浮停止按钮
 ├── Playback.java                  # 实时调度，按毫秒派发
@@ -51,8 +56,17 @@ app/src/com/handpan/autoplay/
 ├── ScaleMapper.java               # 音高 → 简谱音级
 ├── PadMapper.java                 # 音级 + 八度 → 9 个琴键中的哪一个
 ├── AppPrefs.java                  # 坐标与设置持久化
-├── Playback.java / RawNote.java   # 数据类
+└── RawNote.java                   # 音符数据类
 ```
+
+## 页面之间的状态
+
+三个 Activity 之间没有直接引用：当前曲目放在 `Session`（进程内单例，`version()` 自增供各页判断是否要刷新），
+演奏参数放在 `AppPrefs`（设置页 `onPause` 写回）。演奏页 `onResume` 比对 `Session.version()`，变了才重画。
+任一页都可以独立改动，不牵动其它页。
+
+顺序 / 随机演奏的衔接在演奏页：一次演奏完成且模式不是"单曲"时，从 `SongLibrary` 取下一首，
+优先读存档（秒切），没有存档才回到解析流程，然后重新走倒计时。
 
 ## 关键设计
 
@@ -112,7 +126,7 @@ YIN 是**单音**检测器，喂整首混音会锁到贝斯和底鼓。分析频
 | 九键八度映射（E4→中音3、E5→高音3、A3→低音6、9 键全可达） | PASS 26/26 |
 | 自动识调（12 个调全对） | PASS |
 | 自动识速（500/666/400/250ms 间隔分别还原为 120/90/150/120 BPM；无节奏信息时返回 0） | PASS |
-| 和弦分组（do-mi-sol → 一次三指；同键不重复按；上限生效） | PASS |
+| 和弦分组（do-mi-sol → 一次三指；同键不重复按；上限 1/4/6/9 均生效；0 或负数按 1 处理） | PASS 8/8 |
 | 点击计划（单个音也必须有输出——曾因整数溢出恒为空） | PASS |
 | 存档格式（500/3000 音符往返一致、版本不符/缺头/空内容返回 null、坏行跳过、换行清洗） | PASS 11/11 |
 | APK 打包合规（resources.arsc 不压缩 + 4 字节对齐） | PASS |

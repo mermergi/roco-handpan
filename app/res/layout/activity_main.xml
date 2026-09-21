@@ -11,171 +11,64 @@
         android:padding="14dp">
 
         <TextView
-            android:id="@+id/tv_perms"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#EEF3F7"
-            android:padding="8dp"
-            android:textSize="14sp"
-            android:text="权限状态" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btn_overlay"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="授予悬浮窗权限" />
-
-            <Button
-                android:id="@+id/btn_access"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="开启无障碍服务" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btn_calibrate"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="校准琴键" />
-
-            <Button
-                android:id="@+id/btn_test"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="试弹一遍" />
-        </LinearLayout>
-
-        <Button
-            android:id="@+id/btn_pick"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="选择音乐文件（MIDI / MP3 / WAV / 简谱txt）" />
-
-        <TextView
-            android:id="@+id/tv_file"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingTop="6dp"
-            android:text="文件：未选择"
+            android:text="当前曲目"
             android:textSize="13sp" />
 
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btn_reparse"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="手动解析" />
-
-            <Button
-                android:id="@+id/btn_save"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="手动保存" />
-        </LinearLayout>
-
         <TextView
-            android:id="@+id/tv_library_title"
+            android:id="@+id/tv_song"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:layout_marginBottom="6dp"
-            android:text="已导入曲目"
+            android:paddingTop="4dp"
+            android:text="还没有选择曲目"
             android:textSize="17sp"
             android:textStyle="bold" />
 
         <LinearLayout
-            android:id="@+id/list_songs"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/tv_library_empty"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingBottom="6dp"
-            android:text="还没有导入过曲目。点上面【选择音乐文件】导入一首，它会记在这里。"
-            android:textSize="13sp" />
+            <Button
+                android:id="@+id/btn_songs"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="曲目库" />
 
-        <Button
-            android:id="@+id/btn_clear_library"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="清空曲目列表和存档" />
+            <Button
+                android:id="@+id/btn_settings"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="设置" />
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="12dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="调性" />
+                android:text="演奏方式" />
 
             <Spinner
-                android:id="@+id/sp_key"
+                android:id="@+id/sp_mode"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="BPM" />
-
-            <EditText
-                android:id="@+id/et_bpm"
-                android:layout_width="70dp"
-                android:layout_height="wrap_content"
-                android:inputType="number"
-                android:text="90" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="速度×" />
-
-            <EditText
-                android:id="@+id/et_speed"
-                android:layout_width="70dp"
-                android:layout_height="wrap_content"
-                android:inputType="numberDecimal"
-                android:text="1.0" />
         </LinearLayout>
-
-        <CheckBox
-            android:id="@+id/cb_zero"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="按八度自动选键（推荐；关闭则统一用中音区）" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
             android:orientation="horizontal">
 
             <Button
@@ -197,7 +90,7 @@
             android:id="@+id/tv_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="12dp"
             android:background="#FFF8E1"
             android:padding="10dp"
             android:textSize="14sp"
