@@ -77,6 +77,18 @@ public final class PadMapper {
     }
 
     /**
+     * The pitch a pad stands for, in the octave layout relative to {@code tonicMidi}.
+     *
+     * <p>Inverse of {@link #slotFor}: used when a performance recorded on the pad board has to be
+     * stored as an ordinary note list, so playback, saving and the song library all keep working
+     * without a second code path.
+     */
+    public static int midiForSlot(int slot, int rootPc, int tonicMidi) {
+        if (slot < 0 || slot >= DEGREE.length) return -1;
+        return scaleMidi(tonicMidi, (DEGREE[slot] - 1) + 7 * OCTAVE[slot]);
+    }
+
+    /**
      * Chooses a pad for one pitch.
      *
      * @param octaveAware when false, the octave is ignored and every degree uses its base-octave pad

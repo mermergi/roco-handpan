@@ -36,6 +36,11 @@ app/src/com/handpan/autoplay/
 ├── MainActivity.java              # 演奏页（曲目 + 全部演奏参数 + 解析/保存）
 ├── SongsActivity.java             # 曲目库页（导入 / 列表 / 清空）
 ├── SettingsActivity.java          # 设置页（权限 / 校准 / 试弹）
+├── PracticeActivity.java          # 练习 / 录制页
+├── PadBoardView.java              # 九键演奏板（计时圈、命中反馈）
+├── PracticeSession.java           # 练习判分（纯 Java，可测）
+├── RecordingStore.java            # 录音存取（Android 存储层）
+├── RecordingCodec.java            # 录音文件格式（纯 Java，可测）
 ├── Session.java                   # 三页共享的当前曲目
 ├── Loader.java                    # 后台解析 + 回主线程回调
 ├── Ui.java                        # 共用小工具
@@ -120,6 +125,20 @@ YIN 是**单音**检测器，喂整首混音会锁到贝斯和底鼓。分析频
 - 音频最多分析 5 分钟。
 - `dispatchGesture` 每次点击有几十毫秒系统开销，极快的十六分音符不稳。
 - 目标游戏若带内核级反作弊或无障碍监测，可能收不到注入的点击。
+
+## 测试
+
+`tests/run.sh` 编译并运行纯 JVM 测试（不需要设备）：
+
+```
+TestCore        51 项   MIDI 解析 / 音高检测 / 识调 / 识速 / 九键映射 / 和弦 / 计时 / 切换索引 / 存档
+TestPractice    29 项   判定窗口 / 空按不计分 / 漏拍自动 Miss / 最近目标选择 / 准确率
+TestRecording   14 项   录音格式往返 / 坏行与越界跳过 / 版本校验
+TestRoundTrip    4 项   琴键→音符→琴键 精确往返（12 调 × 7 八度 × 9 键）
+```
+
+MIDI 固件由 `tests/gen_fixtures.py` 逐字节生成，不联网、不依赖库。需要 Android 的部分
+（Context / Handler / MediaCodec / 无障碍注入）只能在设备上验证，不在覆盖范围内。
 
 ## 验证
 

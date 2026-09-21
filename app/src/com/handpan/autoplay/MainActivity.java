@@ -123,6 +123,12 @@ public class MainActivity extends Activity {
                 startActivity(new Intent(MainActivity.this, SettingsActivity.class));
             }
         });
+        findViewById(R.id.btn_practice).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, PracticeActivity.class));
+            }
+        });
         btnPlay.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -177,6 +183,10 @@ public class MainActivity extends Activity {
     private void renderPreview() {
         SongLoader.Song song = Session.song();
         if (song == null) return;
+        if (isRecording()) {
+            renderRecordingPreview();
+            return;
+        }
         List<RawNote> mono = SongLoader.monophonic(song.notes);
         int root = AppPrefs.getRootPitchClass(this);
         int tonic = PadMapper.tonicFor(lowestMidi(mono), root);
@@ -203,6 +213,24 @@ public class MainActivity extends Activity {
                 + "\n\n改【设置】里的参数后回到这里会自动刷新。");
     }
 
+    /** Recordings preview as the pads that were pressed, in order. */
+    private void renderRecordingPreview() {
+        RecordingCodec.Data data = RecordingStore.load(this, RecordingStore.idOf(Session.uri()));
+        if (data == null) {
+            tvPreview.setText("这条录音读不出来了。");
+            return;
+        }
+        StringBuilder preview = new StringBuilder();
+        int shown = 0;
+        for (int i = 0; i < data.hits.size() && shown < 60; i++) {
+            preview.append(PadMapper.shortOf(data.hits.get(i).slot)).append(' ');
+            shown++;
+        }
+        tvPreview.setText("【录音】共 " + data.hits.size() + " 次按键，"
+                + (data.lengthMs() / 1000) + " 秒\n前 " + shown + " 次：\n" + preview
+                + "\n\n录音按存下的琴键直接回放，不经过解析。");
+    }
+
     private static int lowestMidi(List<RawNote> notes) {
         int low = 127;
         for (int i = 0; i < notes.size(); i++) low = Math.min(low, notes.get(i).midi);
@@ -211,8 +239,39 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------------ playback
 
+    /** True when the current entry is a recorded performance rather than a parsed song. */
+    private boolean isRecording() {
+        return RecordingStore.isRecording(Session.uri());
+    }
+
+    /**
+     * A recording is replayed straight from its stored presses.
+     *
+     * <p>Deliberately not routed through the notes: going pads -> notes -> pads would have to
+     * re-derive the tonic, and a recording that used the low pad would come back an octave out.
+     */
+    private List<Playback.Tap> buildRecordingTaps() {
+        List<Playback.Tap> taps = new ArrayList<Playback.Tap>();
+        RecordingCodec.Data data = RecordingStore.load(this, RecordingStore.idOf(Session.uri()));
+        if (data == null) return taps;
+        float speed = AppPrefs.getSpeed(this);
+        if (speed <= 0f) speed = 1f;
+        long lastAt = Long.MIN_VALUE / 4;
+        for (int i = 0; i < data.hits.size(); i++) {
+            RecordingCodec.Hit hit = data.hits.get(i);
+            float[] p = AppPrefs.getPad(this, hit.slot);
+            if (p == null) continue;
+            long at = TapPlanner.LEAD_IN_MS + Math.round(hit.atMs / speed);
+            if (at - lastAt < TapPlanner.MIN_GAP_MS) continue;
+            taps.add(new Playback.Tap(new float[]{p[0]}, new float[]{p[1]}, at));
+            lastAt = at;
+        }
+        return taps;
+    }
+
     private List<Playback.Tap> buildTaps() {
         List<Playback.Tap> taps = new ArrayList<Playback.Tap>();
+        if (isRecording()) return buildRecordingTaps();
         SongLoader.Song song = Session.song();
         if (song == null || song.notes.isEmpty()) return taps;
         int root = AppPrefs.getRootPitchClass(this);
@@ -246,7 +305,7 @@ public class MainActivity extends Activity {
     }
 
     private void play() {
-        if (Session.song() == null) {
+        if (Session.uri() == null) {
             setStatus("还没有选曲目。到【曲目库】选一首，或直接导入一个文件。");
             return;
         }

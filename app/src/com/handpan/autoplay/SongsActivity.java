@@ -11,6 +11,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -221,6 +222,16 @@ public class SongsActivity extends Activity {
 
     /** Loads a remembered song, preferring its snapshot so nothing is parsed again. */
     private void select(SongLibrary.Entry entry) {
+        if (RecordingStore.isRecording(entry.uri)) {
+            RecordingCodec.Data data = RecordingStore.load(this, RecordingStore.idOf(entry.uri));
+            if (data == null) {
+                status("这条录音读不出来了。");
+                return;
+            }
+            Session.set(entry.uri, displaySong(entry.uri, data));
+            finish();
+            return;
+        }
         SongCache.Snapshot snapshot = SongCache.load(this, entry.uri);
         if (snapshot != null) {
             Session.set(entry.uri, snapshot.song);
@@ -248,6 +259,20 @@ public class SongsActivity extends Activity {
                         + "\n（文件可能已被移动或删除；已存档的曲目不依赖原文件。）");
             }
         });
+    }
+
+    /**
+     * A recording has no notes of its own, but the play screen wants a Song for its title and
+     * counters. This builds one purely for display; playback reads the stored presses directly.
+     */
+    private SongLoader.Song displaySong(String uri, RecordingCodec.Data data) {
+        int root = AppPrefs.getRootPitchClass(this);
+        List<RawNote> notes = new ArrayList<RawNote>();
+        for (int i = 0; i < data.hits.size(); i++) {
+            RecordingCodec.Hit hit = data.hits.get(i);
+            notes.add(new RawNote(PadMapper.midiForSlot(hit.slot, root, 60), hit.atMs, 200));
+        }
+        return new SongLoader.Song("录音", data.name, notes, data.lengthMs(), "录音回放（不经过解析）");
     }
 
     private void status(String message) {
