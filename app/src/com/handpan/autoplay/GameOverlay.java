@@ -597,22 +597,34 @@ public final class GameOverlay {
             float w = getWidth();
             canvas.drawRoundRect(new RectF(0, 0, w, h), dp(10), dp(10), bg);
 
-            final float hitX = dp(20);
-            final float itemW = dp(40);
+            final float hitX = dp(18);
+            final float itemW = dp(30);
             final float itemH = dp(28);
+            final float gap = dp(2);
+            final float maxGap = dp(6); // tiles stay a tight queue, never spread far apart
             final float top = (h - itemH) / 2f;
 
             line.setAlpha(200);
             canvas.drawLine(hitX, top - dp(3), hitX, top + itemH + dp(3), line);
 
-            for (int i = groups.size() - 1; i >= 0; i--) {
-                PracticeSession.Group g = groups.get(i);
-                // Positioned in *lane* lead time, not the ring lead: the same short distance is
-                // covered over a much longer span, so it drifts instead of racing.
-                float ahead = (g.timeMs - nowMs) / (float) LANE_LEAD_MS;
-                if (ahead < 0f) ahead = 0f;
-                if (ahead > 1f) ahead = 1f;
-                float x = hitX + ahead * (w - hitX - itemW - dp(6));
+            // Laid out as a queue, nearest first, never overlapping.
+            //
+            // Positioning purely by time does not work in a strip this narrow: two notes 250ms apart
+            // map only ~14dp apart while a tile is 34dp wide, so they pile up. Each tile is therefore
+            // pushed clear of the previous one, and once there is no room the rest are simply not
+            // drawn - the nearest note is always the one that matters.
+            float usable = w - hitX - itemW - dp(4);
+            if (usable < 0) usable = 0;
+
+            long[] times = new long[groups.size()];
+            for (int i = 0; i < groups.size(); i++) times[i] = groups.get(i).timeMs;
+            List<LaneLayout.Placement> placed = LaneLayout.place(times, nowMs, LANE_LEAD_MS,
+                    hitX, usable, itemW, gap, maxGap, w - dp(3));
+
+            for (int i = 0; i < placed.size(); i++) {
+                LaneLayout.Placement p = placed.get(i);
+                PracticeSession.Group g = groups.get(p.index);
+                float x = p.x;
                 item.setColor(PALETTE[(g.order - 1) % PALETTE.length]);
                 canvas.drawRoundRect(new RectF(x, top, x + itemW, top + itemH), dp(6), dp(6), item);
 
