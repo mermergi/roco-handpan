@@ -44,6 +44,8 @@ app/src/com/handpan/autoplay/
 ├── JianpuParser.java              # 简谱文本解析
 ├── SongLoader.java                # 格式分发 + 单音旋律提取
 ├── SongLibrary.java               # 已导入曲目（含持久化 URI 权限）
+├── SongCache.java                 # 解析结果存档（Android 存储层）
+├── SnapshotCodec.java             # 存档格式读写（纯 Java，可测）
 ├── KeyDetector.java               # 自动识调（12 个调）
 ├── TempoEstimator.java            # 自动识速（从起音间隔推断 BPM）
 ├── ScaleMapper.java               # 音高 → 简谱音级
@@ -112,6 +114,7 @@ YIN 是**单音**检测器，喂整首混音会锁到贝斯和底鼓。分析频
 | 自动识速（500/666/400/250ms 间隔分别还原为 120/90/150/120 BPM；无节奏信息时返回 0） | PASS |
 | 和弦分组（do-mi-sol → 一次三指；同键不重复按；上限生效） | PASS |
 | 点击计划（单个音也必须有输出——曾因整数溢出恒为空） | PASS |
+| 存档格式（500/3000 音符往返一致、版本不符/缺头/空内容返回 null、坏行跳过、换行清洗） | PASS 11/11 |
 | APK 打包合规（resources.arsc 不压缩 + 4 字节对齐） | PASS |
 
 `SongLibrary` 依赖 Android 的 SharedPreferences 与 org.json，无法在纯 JVM 中测试，仅有编译与打包检查覆盖。

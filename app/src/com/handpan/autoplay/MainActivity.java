@@ -65,8 +65,11 @@ public class MainActivity extends Activity {
     private SongLoader.Song song;
     private int countdownLeft;
 
-    /** Last picked document; 【重新解析】 and the song list reuse it. */
+    /** Last picked document; 【手动解析】 and the song list reuse it. */
     private Uri lastUri;
+
+    /** Saved BPM to display instead of re-estimating, while a snapshot is being restored. */
+    private int bpmOverride;
 
     /** Guards the key spinner's listener while the app sets the detected key programmatically. */
     private boolean updatingKey;
@@ -94,8 +97,9 @@ public class MainActivity extends Activity {
             @Override
             public void onClick(View v) {
                 SongLibrary.clear(MainActivity.this);
+                SongCache.clear(MainActivity.this);
                 refreshLibrary();
-                setStatus("曲目列表已清空。");
+                setStatus("曲目列表和存档都已清空。");
             }
         });
         refreshLibrary();
@@ -172,11 +176,13 @@ public class MainActivity extends Activity {
         findViewById(R.id.btn_reparse).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (lastUri == null) {
-                    setStatus("还没导入过文件。");
-                    return;
-                }
-                loadSong(lastUri, false);
+                manualParse();
+            }
+        });
+        findViewById(R.id.btn_save).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                manualSave();
             }
         });
         btnPlay.setOnClickListener(new View.OnClickListener() {
@@ -328,6 +334,7 @@ public class MainActivity extends Activity {
      */
     private void loadSong(final Uri uri, final boolean autoDetect) {
         lastUri = uri;
+        bpmOverride = 0;
         final String name = SongLoader.displayName(this, uri);
         setStatus("正在解析 " + name + " …");
         tvFile.setText("文件：" + name);
@@ -396,11 +403,12 @@ public class MainActivity extends Activity {
 
         // Tempo: MIDI carries its own, but the BPM box used to be a bare number with no explanation.
         // Estimate from note onsets so every format shows a sensible value and the box stays in sync.
-        int bpm = TempoEstimator.estimate(mono);
+        int bpm = bpmOverride > 0 ? bpmOverride : TempoEstimator.estimate(mono);
         if (bpm > 0) {
             etBpm.setText(String.valueOf(bpm));
             AppPrefs.setBpm(this, bpm);
-            note.append("\n自动识别曲速：约 ").append(bpm).append(" BPM");
+            note.append(bpmOverride > 0 ? "\n曲速（存档）：" : "\n自动识别曲速：约 ")
+                    .append(bpm).append(" BPM");
         } else {
             note.append("\n曲速：音符太少识别不出，可手动填 BPM");
         }
@@ -469,7 +477,7 @@ public class MainActivity extends Activity {
             title.setEllipsize(TextUtils.TruncateAt.MIDDLE);
 
             TextView meta = new TextView(this);
-            meta.setText(entry.subtitle());
+            meta.setText(entry.subtitle() + (SongCache.has(this, entry.uri) ? " · 已存档" : ""));
             meta.setTextSize(12.5f);
             meta.setTextColor(0xFF6B7C93);
             meta.setPadding(0, dp(5), 0, 0);
@@ -480,15 +488,16 @@ public class MainActivity extends Activity {
             row.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    loadSong(Uri.parse(entry.uri), false);
+                    loadFromCache(Uri.parse(entry.uri));
                 }
             });
             row.setOnLongClickListener(new View.OnLongClickListener() {
                 @Override
                 public boolean onLongClick(View v) {
                     SongLibrary.remove(MainActivity.this, entry.uri);
+                    SongCache.remove(MainActivity.this, entry.uri);
                     refreshLibrary();
-                    setStatus("已从列表移除：" + entry.name);
+                    setStatus("已从列表移除（含存档）：" + entry.name);
                     return true;
                 }
             });
@@ -530,6 +539,76 @@ public class MainActivity extends Activity {
         tvPreview.setText("【" + key + " 调】共 " + hits.size() + " 次点击，前 " + shown
                 + " 次（' = 高八度，, = 低八度，+ = 同时按下）：\n" + preview
                 + "\n\n改动调性或八度选项会立即刷新这里；演奏也按这里显示的来。");
+    }
+
+    // ------------------------------------------------------------------ cache
+
+    /** Re-parses the current file with the settings on screen. */
+    private void manualParse() {
+        if (lastUri == null) {
+            setStatus("还没导入过文件。先点【选择音乐文件】。");
+            return;
+        }
+        loadSong(lastUri, false);
+    }
+
+    /** Stores the parsed notes so later playback never has to parse the file again. */
+    private void manualSave() {
+        if (song == null) {
+            setStatus("还没有可保存的内容，先导入并解析一首曲子。");
+            return;
+        }
+        if (lastUri == null) {
+            setStatus("当前内容没有对应的原始文件，无法存档。");
+            return;
+        }
+        String name = SongLoader.displayName(this, lastUri);
+        boolean ok = SongCache.save(this, lastUri.toString(), song,
+                KEYS[spKey.getSelectedItemPosition()],
+                (int) parseFloat(etBpm, 90f, 20f, 400f),
+                cbZero.isChecked(), MAX_CHORD);
+        refreshLibrary();
+        setStatus(ok
+                ? "已存档：" + name + "（" + song.notes.size() + " 个音符）\n"
+                        + "以后在曲目列表点这一首，会直接读存档播放，不再解析原文件——"
+                        + "原文件删了、移走了也能弹。"
+                : "保存失败，请重试。");
+    }
+
+    /** Loads a remembered song straight from its snapshot, falling back to parsing if absent. */
+    private void loadFromCache(Uri uri) {
+        SongCache.Snapshot snap = SongCache.load(this, uri.toString());
+        if (snap == null) {
+            loadSong(uri, false);
+            return;
+        }
+        lastUri = uri;
+        song = snap.song;
+        bpmOverride = snap.bpm;
+        cbZero.setChecked(snap.octaveAware);
+        if (snap.bpm > 0) etBpm.setText(String.valueOf(snap.bpm));
+
+        int index = 0;
+        for (int i = 0; i < KEYS.length; i++) {
+            if (KEYS[i].equals(snap.key)) {
+                index = i;
+                break;
+            }
+        }
+        updatingKey = true;
+        spKey.setSelection(index);
+        updatingKey = false;
+        AppPrefs.setKey(this, KEYS[index]);
+
+        tvFile.setText("文件：" + snap.song.name + "（存档）");
+        showSong(false, snap.key);
+        bpmOverride = 0;
+
+        setStatus("已从存档载入：" + snap.song.name + "（" + snap.song.notes.size() + " 个音符，"
+                + "未重新解析）\n调性 " + KEYS[index]
+                + (snap.bpm > 0 ? "　BPM " + snap.bpm : "")
+                + "　存档于 " + new java.text.SimpleDateFormat("MM-dd HH:mm",
+                        java.util.Locale.getDefault()).format(new java.util.Date(snap.savedAt)));
     }
 
     // ------------------------------------------------------------------ playback

@@ -74,11 +74,25 @@
             android:text="文件：未选择"
             android:textSize="13sp" />
 
-        <Button
-            android:id="@+id/btn_reparse"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="重新解析（按当前调性/八度，不再自动识调）" />
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_reparse"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="手动解析" />
+
+            <Button
+                android:id="@+id/btn_save"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="手动保存" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/tv_library_title"
@@ -108,7 +122,7 @@
             android:id="@+id/btn_clear_library"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="清空曲目列表" />
+            android:text="清空曲目列表和存档" />
 
         <LinearLayout
             android:layout_width="match_parent"
