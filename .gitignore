@@ -6,3 +6,5 @@ build/
 
 # apksigner v4 签名旁文件，不需要进仓库
 *.idsig
+*.apk
+*.apk.idsig
