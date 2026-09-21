@@ -1,0 +1,8 @@
+# 构建中间产物（由 build.sh 重新生成）
+build/
+# 编辑器/系统杂项
+*.swp
+.DS_Store
+
+# apksigner v4 签名旁文件，不需要进仓库
+*.idsig

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">手碟自动演奏</string>
+    <string name="service_label">手碟自动演奏</string>
+    <string name="accessibility_description">按校准好的琴键坐标自动点按屏幕，用于自动弹奏游戏内的手碟。本服务不读取屏幕内容。</string>
+</resources>
