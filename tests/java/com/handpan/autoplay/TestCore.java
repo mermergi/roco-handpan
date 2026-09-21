@@ -144,6 +144,18 @@ public class TestCore {
         check("调名与音级一致（12/12）", pcOk == 12, "" + pcOk);
         check("Bb 解析为音级 10", ScaleMapper.rootPitchClass("Bb") == 10, "");
 
+        // 回归：识调必须看整首编曲，不能只看旋律线。
+        // 固件是 C 大调 I-V-vi-IV，旋律在 60+（不含 F、B），伴奏把 F 补上。
+        MidiParser.Result arrangement = midi("arrangement.mid");
+        List<RawNote> melodyOnly = new ArrayList<RawNote>();
+        for (RawNote n : arrangement.notes) if (n.midi >= 60) melodyOnly.add(n);
+        int song = KeyDetector.bestKeyIndexForSong(arrangement.notes);
+        int melody = KeyDetector.bestKeyIndex(melodyOnly);
+        check("整首编曲判调 = C（回归：只喂旋律线会判成 G）", song == 0,
+                KeyDetector.KEYS[song] + "（应 C）");
+        check("仅旋律线判调确实是错的（证明这条回归有意义）", melody != 0,
+                KeyDetector.KEYS[melody]);
+
         section("自动识速");
         check("每 500ms -> 120 BPM", Math.abs(TempoEstimator.estimate(seq(500, 20)) - 120) <= 3, "");
         check("每 666ms -> 90 BPM", Math.abs(TempoEstimator.estimate(seq(666, 20)) - 90) <= 3, "");

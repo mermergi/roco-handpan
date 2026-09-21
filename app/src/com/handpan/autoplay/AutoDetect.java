@@ -17,10 +17,14 @@ public final class AutoDetect {
 
     /** @return true when detection produced something and the settings were updated. */
     public static boolean apply(Context c, List<RawNote> notes) {
-        List<RawNote> melody = SongLoader.monophonic(notes);
-        if (melody.isEmpty()) return false;
-        AppPrefs.setKey(c, KeyDetector.bestKeyName(melody));
-        int bpm = TempoEstimator.estimate(melody);
+        if (notes == null || notes.isEmpty()) return false;
+
+        // Key comes from every note: the accompaniment carries the harmony that disambiguates the
+        // key, and a melody-only list often fits two major keys at once (see
+        // KeyDetector.bestKeyIndexForSong). Tempo stays on the melody line, where the note onsets
+        // are the tune's rhythm rather than the accompaniment's.
+        AppPrefs.setKey(c, KeyDetector.bestKeyNameForSong(notes));
+        int bpm = TempoEstimator.estimate(SongLoader.monophonic(notes));
         if (bpm > 0) AppPrefs.setBpm(c, bpm);
         return true;
     }
