@@ -53,6 +53,15 @@ public class MainActivity extends Activity {
     private long shownVersion = -1;
     private int countdownLeft;
 
+    /**
+     * True while switching songs from the floating bar.
+     *
+     * <p>{@code Playback.stop()} reports a non-completed finish, and the listener's normal reaction to
+     * that is to tear the bar down and write "已停止。". During a switch that is wrong on both counts,
+     * so the callback is suppressed and the switch path owns the UI state.
+     */
+    private boolean switching;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -274,6 +283,11 @@ public class MainActivity extends Activity {
 
     /** Starts playing the current song immediately, with no countdown. */
     private void startNow() {
+        // Every start path funnels through here, so this is the one place that must guarantee the
+        // transport bar exists - switching songs used to hide it and never bring it back.
+        if (!OverlayController.isBarVisible()) {
+            OverlayController.showTransport(this, transport());
+        }
         List<Playback.Tap> taps = buildTaps();
         if (taps.isEmpty()) {
             OverlayController.hideStopButton();
@@ -336,23 +350,23 @@ public class MainActivity extends Activity {
             setStatus("曲目库是空的，先到【曲目库】导入曲子。");
             return;
         }
-        String current = Session.uri();
-        int index = -1;
-        for (int i = 0; i < entries.size(); i++) {
-            if (entries.get(i).uri.equals(current)) {
-                index = i;
-                break;
-            }
+        List<String> uris = new ArrayList<String>();
+        for (int i = 0; i < entries.size(); i++) uris.add(entries.get(i).uri);
+        int target = PlaylistNavigator.step(PlaylistNavigator.indexOf(uris, Session.uri()), delta,
+                entries.size());
+        if (target < 0) {
+            setStatus("曲目库是空的。");
+            return;
         }
-        int target;
-        if (index < 0) {
-            target = 0;
-        } else {
-            target = ((index + delta) % entries.size() + entries.size()) % entries.size();
+        // Keep the bar on screen: after switching, the user may immediately want to switch again,
+        // pause, or stop. Hiding it here is what made 下一首 look like it closed the controls.
+        switching = true;
+        try {
+            Playback.stop();
+        } finally {
+            switching = false;
         }
-        Playback.stop();
         ui.removeCallbacksAndMessages(null);
-        OverlayController.hideStopButton();
         SongLibrary.Entry entry = entries.get(target);
         setStatus((delta < 0 ? "上一首：" : "下一首：") + entry.name + " …");
         loadForChain(entry, false);
@@ -368,6 +382,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onFinish(final boolean completed) {
+                if (switching) return; // the switch path handles the UI
                 if (completed && AppPrefs.getPlayMode(MainActivity.this) != AppPrefs.MODE_SINGLE) {
                     advance();
                     return;
@@ -549,28 +564,21 @@ public class MainActivity extends Activity {
     /** Picks the next song after a finished run, when the mode asks for it. */
     private void advance() {
         int mode = AppPrefs.getPlayMode(this);
-        OverlayController.hideStopButton();
+        // The bar is left alone: startCountdown replaces it, and if loading the next song fails the
+        // user still has a working 停止 instead of no controls at all.
         List<SongLibrary.Entry> entries = SongLibrary.list(this);
         if (entries.size() < 2) {
             setStatus("演奏完成。曲目库里只有 " + entries.size() + " 首，无法继续"
                     + (mode == AppPrefs.MODE_RANDOM ? "随机" : "顺序") + "演奏。");
             return;
         }
-        String current = Session.uri();
-        int index = -1;
-        for (int i = 0; i < entries.size(); i++) {
-            if (entries.get(i).uri.equals(current)) {
-                index = i;
-                break;
-            }
-        }
-        int next;
-        if (mode == AppPrefs.MODE_RANDOM) {
-            next = index;
-            while (next == index) next = random.nextInt(entries.size());
-        } else {
-            next = (index + 1) % entries.size();
-        }
+        List<String> uris = new ArrayList<String>();
+        for (int i = 0; i < entries.size(); i++) uris.add(entries.get(i).uri);
+        int index = PlaylistNavigator.indexOf(uris, Session.uri());
+        int next = mode == AppPrefs.MODE_RANDOM
+                ? PlaylistNavigator.randomOther(index, entries.size(), random.nextInt(entries.size()))
+                : PlaylistNavigator.step(index, 1, entries.size());
+        if (next < 0) next = 0;
         SongLibrary.Entry entry = entries.get(next);
         setStatus((mode == AppPrefs.MODE_RANDOM ? "随机" : "顺序")
                 + "演奏下一首：" + entry.name + " …");

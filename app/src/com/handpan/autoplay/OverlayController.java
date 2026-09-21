@@ -283,6 +283,11 @@ public final class OverlayController {
         showBar(ctx, bar, handle, null);
     }
 
+    /** True while the floating bar is on screen. */
+    public static boolean isBarVisible() {
+        return sStopView != null;
+    }
+
     /** Updates the middle button's label to match the play/pause state. */
     public static void setPaused(boolean paused) {
         if (sPauseView != null) sPauseView.setText(paused ? "继续" : "暂停");
