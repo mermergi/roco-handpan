@@ -84,6 +84,15 @@ public final class GameOverlay {
      */
     private static final long FORWARD_WINDOW_MS = 90L;
 
+    /**
+     * Gap between forwarding attempts, and how many times to try.
+     *
+     * <p>Two retries at 25 ms fit inside {@link #FORWARD_WINDOW_MS}, so a refused tap is still
+     * delivered while the guide layer is out of the way rather than being lost outright.
+     */
+    private static final long FORWARD_RETRY_MS = 25L;
+    private static final int FORWARD_ATTEMPTS = 2;
+
     private static final long TICK_MS = 16L;
 
     public interface Callback {
@@ -394,9 +403,37 @@ public final class GameOverlay {
      */
     private static void forwardTouch(HandpanAccessibilityService service, float x, float y) {
         setGuideTouchable(false);
-        service.tapAll(new float[]{x}, new float[]{y});
+        dispatchForward(service, x, y, 0);
+    }
+
+    /**
+     * Hands one forwarded tap to the game, retrying a refusal.
+     *
+     * <p>A refusal happens when the platform still has a gesture in flight, and simply dropping the
+     * tap loses the press the user just made - which is exactly what a missed note sounds like. The
+     * retries are short enough to stay inside the window the guide layer stays non-touchable.
+     */
+    private static void dispatchForward(final HandpanAccessibilityService service,
+                                        final float x, final float y, final int attempt) {
+        if (service.tapAll(new float[]{x}, new float[]{y})) {
+            restoreTouchAfter(FORWARD_WINDOW_MS);
+            return;
+        }
+        if (attempt < FORWARD_ATTEMPTS) {
+            HANDLER.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    dispatchForward(service, x, y, attempt + 1);
+                }
+            }, FORWARD_RETRY_MS);
+            return;
+        }
+        restoreTouchAfter(FORWARD_WINDOW_MS);
+    }
+
+    private static void restoreTouchAfter(long delayMs) {
         HANDLER.removeCallbacks(RESTORE_TOUCH);
-        HANDLER.postDelayed(RESTORE_TOUCH, FORWARD_WINDOW_MS);
+        HANDLER.postDelayed(RESTORE_TOUCH, delayMs);
     }
 
     private static void setGuideTouchable(boolean touchable) {

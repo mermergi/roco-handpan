@@ -46,9 +46,32 @@ public final class Playback {
     /** Upper bound on taps dispatched in one tick, so a huge backlog cannot stall the UI thread. */
     private static final int MAX_TAPS_PER_TICK = 32;
 
+    /**
+     * Minimum spacing between two dispatches to the system, in milliseconds.
+     *
+     * <p>{@code dispatchGesture} cancels whatever gesture is already running, so firing the next tap
+     * while the previous 24 ms one is still in flight throws that note away. The gap has to be longer
+     * than one tap.
+     */
+    private static final long MIN_DISPATCH_GAP_MS = 40L;
+
+    /**
+     * How many times a refused tap is retried before it is given up on.
+     *
+     * <p>Retrying matters because a refusal is not rare - the platform rejects a dispatch while
+     * another gesture is in progress, and it does so under exactly the load this app runs in, with a
+     * game in the foreground. Dropping the tap on the floor is what makes a song sound like it is
+     * missing notes. The cap stops a dead service from stalling playback forever.
+     */
+    private static final int MAX_DISPATCH_ATTEMPTS = 3;
+
     private static List<Tap> sTaps;
     private static int sIndex;
     private static Listener sListener;
+
+    /** When the last gesture was handed to the system, and how often the current tap has failed. */
+    private static long sLastDispatchAt;
+    private static int sAttempts;
 
     /** Elapsed-time bookkeeping, including pauses. Pure logic so it can be unit tested. */
     private static final ScheduleClock CLOCK = new ScheduleClock();
@@ -102,10 +125,22 @@ public final class Playback {
             while (sIndex < sTaps.size()
                     && sTaps.get(sIndex).atMs <= elapsed
                     && dispatched < MAX_TAPS_PER_TICK) {
+                if (SystemClock.uptimeMillis() - sLastDispatchAt < MIN_DISPATCH_GAP_MS) break;
+
                 Tap tap = sTaps.get(sIndex);
-                service.tapAll(tap.xs, tap.ys);
-                sIndex++;
-                dispatched++;
+                if (service.tapAll(tap.xs, tap.ys)) {
+                    sLastDispatchAt = SystemClock.uptimeMillis();
+                    sAttempts = 0;
+                    sIndex++;
+                    dispatched++;
+                } else {
+                    // Refused: the system already had a gesture in flight. Try the same note again
+                    // next tick rather than skipping it.
+                    sAttempts++;
+                    if (sAttempts < MAX_DISPATCH_ATTEMPTS) break;
+                    sAttempts = 0;
+                    sIndex++;
+                }
             }
 
             if (sIndex >= sTaps.size()) {
@@ -122,6 +157,8 @@ public final class Playback {
         stop();
         sTaps = taps;
         sIndex = 0;
+        sAttempts = 0;
+        sLastDispatchAt = 0L;
         sListener = listener;
         CLOCK.start(SystemClock.uptimeMillis());
         if (sListener != null) sListener.onProgress(0, taps.size());
