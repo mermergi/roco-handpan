@@ -209,6 +209,27 @@ public class TestCore {
         check("省得不够就不换音级：G4 仍是 5 级",
                 PadMapper.slotFor(67, 0, 60, true) == 5,
                 PadMapper.labelOf(PadMapper.slotFor(67, 0, 60, true)));
+        section("关掉「允许换音级」之后");
+        // 以前关掉这个开关走的是「每个音级固定在中音区那一个键」，
+        // 低音6 根本不在候选里 —— 一整首下来 0 次，用户直接就看出来了。
+        // 正确的语义是「音级绝不换」，但该用低音区的时候还是要用。
+        check("低音 la（A2）仍然落在低音6",
+                PadMapper.slotFor(45, 0, 60, false) == 8,
+                PadMapper.labelOf(PadMapper.slotFor(45, 0, 60, false)));
+        check("低音 la 不会跑到中音6", PadMapper.slotFor(45, 0, 60, false) != 6, "");
+        check("中音区照旧", PadMapper.slotFor(64, 0, 60, false) == 2,
+                PadMapper.labelOf(PadMapper.slotFor(64, 0, 60, false)));
+        // 关掉之后音级绝不能被换：A#3 是 7 级，就得是 7 级（开的时候会换成低音6）
+        check("关掉时音级绝不换（A#3 仍是 7 级）",
+                PadMapper.slotFor(58, 11, 71, false) == 7,
+                PadMapper.labelOf(PadMapper.slotFor(58, 11, 71, false)));
+        check("开着时同一个音会换成低音6", PadMapper.slotFor(58, 11, 71, true) == 8, "");
+        // 关掉之后低音6 必须真的用得上
+        int[] low = {45, 57, 45, 57};
+        int lowSix = 0;
+        for (int m : low) if (PadMapper.slotFor(m, 0, 60, false) == 8) lowSix++;
+        check("关掉时低音6 用得上", lowSix > 0, "" + lowSix);
+
         // 选音区必须只看「保音级」的偏差，否则会挑一个到处都能凑合、但整体移调错误的八度。
         List<RawNote> oneNote = new ArrayList<RawNote>();
         oneNote.add(new RawNote(58, 0, 500));

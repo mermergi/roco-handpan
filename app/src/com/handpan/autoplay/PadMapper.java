@@ -313,12 +313,17 @@ public final class PadMapper {
      *                    (degrees 1 and 2 then fall back to the upper pads, which are all that exist).
      * @return pad slot 0..{@link #SLOTS}-1, or -1 when the pitch cannot be placed.
      */
+    /**
+     * Chooses a pad for one pitch.
+     *
+     * @param octaveAware true to let the degree change when that clearly plays closer to the written
+     *                    pitch (see {@link #chooseSlot}); false to keep every note on its own degree
+     *                    and only choose which octave of it to use.
+     * @return pad slot 0..{@link #SLOTS}-1, or -1 when the pitch cannot be placed.
+     */
     public static int slotFor(int midi, int rootPc, int tonicMidi, boolean octaveAware) {
         if (midi < 0 || midi > 127) return -1;
         if (octaveAware) return chooseSlot(midi, tonicMidi);
-
-        int step = nearestStep(midi, tonicMidi);
-        int degree = step - Math.floorDiv(step, 7) * 7 + 1;
-        return slotForDegree(degree, 0);
+        return degreeSlot(midi, tonicMidi);
     }
 }

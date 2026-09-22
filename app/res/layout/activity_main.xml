@@ -92,7 +92,7 @@
             android:id="@+id/cb_zero"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="按八度自动选键（推荐；关闭则统一用中音区）" />
+            android:text="允许换音级凑音准（推荐；关闭则音级绝不换，宁可挪八度）" />
 
         <LinearLayout
             android:layout_width="match_parent"

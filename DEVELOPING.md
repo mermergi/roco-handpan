@@ -212,7 +212,7 @@ APK 只放 Release，不放代码树。
 ## 验证
 
 算法模块（`MidiParser` / `PitchDetector` / `PadMapper` / `KeyDetector` / `TapPlanner` /
-`LaneLayout` / `ScoreLink` 等）由 `./tests/run.sh` 验证，**236 项断言**全部通过。
+`LaneLayout` / `ScoreLink` 等）由 `./tests/run.sh` 验证，**242 项断言**全部通过。
 
 | 项目 | 结果 |
 |---|---|
