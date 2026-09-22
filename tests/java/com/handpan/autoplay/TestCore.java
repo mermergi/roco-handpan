@@ -209,6 +209,35 @@ public class TestCore {
         check("省得不够就不换音级：G4 仍是 5 级",
                 PadMapper.slotFor(67, 0, 60, true) == 5,
                 PadMapper.labelOf(PadMapper.slotFor(67, 0, 60, true)));
+        section("九键谱（站点那种 MIDI 数字谱）");
+        // 站点发布的洛克手碟谱就是普通 MIDI，但每个音高本身就是九键之一：
+        // A2 E3 F3 G3 A3 B3 C4 D4 E4。这种谱子不该去「猜调」——谱子本身就是答案。
+        int[] tab = {45, 62, 45, 53, 53, 55, 57, 57, 62, 57, 60, 59, 59, 60, 59, 57};
+        List<RawNote> tabNotes = new ArrayList<RawNote>();
+        for (int i = 0; i < tab.length; i++) tabNotes.add(new RawNote(tab[i], i * 500L, 500));
+        check("全是九键音高 -> 认成九键谱", PadMapper.looksLikeTablature(tabNotes), "");
+        check("九键谱的调按基准调（C）钉死",
+                PadMapper.TAB_ROOT_PC == 0 && PadMapper.TAB_TONIC_MIDI == 60, "");
+        // 每个音都必须弹回它自己那个键，一个都不能错
+        int tabWrong = 0;
+        for (RawNote n : tabNotes) {
+            int slot = PadMapper.slotFor(n.midi, PadMapper.TAB_ROOT_PC, PadMapper.TAB_TONIC_MIDI, true);
+            if (slot < 0 || PadMapper.midiForSlot(slot, PadMapper.TAB_ROOT_PC,
+                    PadMapper.TAB_TONIC_MIDI) != n.midi) tabWrong++;
+        }
+        check("九键谱每个音都弹回原来的键", tabWrong == 0, tabWrong + " 个错");
+        // 普通 C 大调旋律会用到 F4/G4/A4，这些不是琴键，不能被误判成九键谱
+        List<RawNote> ordinary = new ArrayList<RawNote>();
+        for (int m : new int[]{60, 62, 64, 65, 67, 69, 71, 72}) {
+            ordinary.add(new RawNote(m, 0, 500));
+        }
+        check("普通 C 大调旋律不会被误判成九键谱", !PadMapper.looksLikeTablature(ordinary), "");
+        check("空/null 不是九键谱",
+                !PadMapper.looksLikeTablature(null)
+                        && !PadMapper.looksLikeTablature(new ArrayList<RawNote>()), "");
+        check("九键音高判定", PadMapper.isPadPitch(45) && PadMapper.isPadPitch(64)
+                && !PadMapper.isPadPitch(65) && !PadMapper.isPadPitch(48), "");
+
         section("关掉「允许换音级」之后");
         // 以前关掉这个开关走的是「每个音级固定在中音区那一个键」，
         // 低音6 根本不在候选里 —— 一整首下来 0 次，用户直接就看出来了。

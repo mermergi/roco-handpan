@@ -19,6 +19,15 @@ public final class AutoDetect {
     public static boolean apply(Context c, List<RawNote> notes) {
         if (notes == null || notes.isEmpty()) return false;
 
+        // A handpan tab is not something to guess a key for: every note already names a pad, and the
+        // reference tuning is what makes that reading exact. See PadMapper.looksLikeTablature.
+        if (PadMapper.looksLikeTablature(notes)) {
+            AppPrefs.setKey(c, KeyDetector.KEYS[PadMapper.TAB_ROOT_PC]);
+            int tabBpm = TempoEstimator.estimate(SongLoader.monophonic(notes));
+            if (tabBpm > 0) AppPrefs.setBpm(c, tabBpm);
+            return true;
+        }
+
         // Key comes from every note: the accompaniment carries the harmony that disambiguates the
         // key, and a melody-only list often fits two major keys at once (see
         // KeyDetector.bestKeyIndexForSong). Tempo stays on the melody line, where the note onsets

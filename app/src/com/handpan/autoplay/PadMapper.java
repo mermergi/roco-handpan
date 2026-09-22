@@ -307,12 +307,41 @@ public final class PadMapper {
     }
 
     /**
-     * Chooses a pad for one pitch.
-     *
-     * @param octaveAware when false, the octave is ignored and every degree uses its base-octave pad
-     *                    (degrees 1 and 2 then fall back to the upper pads, which are all that exist).
-     * @return pad slot 0..{@link #SLOTS}-1, or -1 when the pitch cannot be placed.
+     * Key and do of the reference tuning: the instrument as the game ships it, and the tuning score
+     * sites write their handpan tablature in.
      */
+    public static final int TAB_ROOT_PC = 0;
+    public static final int TAB_TONIC_MIDI = 60;
+
+    /**
+     * True when a song is already written <em>for this instrument</em>, one note per pad.
+     *
+     * <p>Score sites publish handpan arrangements as ordinary MIDI whose pitches happen to be the
+     * nine pad pitches - A2 E3 F3 G3 A3 B3 C4 D4 E4 - and display them as a numeric tab where a
+     * stacked column means several pads struck together. Importing one through key detection is a
+     * gamble: it happens to land on C and C4, and then every note maps to the pad it was written for,
+     * but nothing guarantees that, and a wrong guess transposes the whole arrangement.
+     *
+     * <p>When every pitch is a pad pitch there is nothing to detect - the tab is the source. Requiring
+     * <em>all</em> of them keeps the rule from firing on ordinary music that merely stays in C major:
+     * an ordinary melody also uses F4, G4 and A4, none of which are pads.
+     */
+    public static boolean looksLikeTablature(List<RawNote> notes) {
+        if (notes == null || notes.isEmpty()) return false;
+        for (int i = 0; i < notes.size(); i++) {
+            if (!isPadPitch(notes.get(i).midi)) return false;
+        }
+        return true;
+    }
+
+    /** True when a pitch is one of the nine pads in the reference tuning. */
+    public static boolean isPadPitch(int midi) {
+        for (int slot = 0; slot < SLOTS; slot++) {
+            if (midiForSlot(slot, TAB_ROOT_PC, TAB_TONIC_MIDI) == midi) return true;
+        }
+        return false;
+    }
+
     /**
      * Chooses a pad for one pitch.
      *
