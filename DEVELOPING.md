@@ -192,10 +192,27 @@ TestSpeed       14 项   倍速虚拟时钟（变速/循环切换/时间倒退/�
 MIDI 固件由 `tests/gen_fixtures.py` 逐字节生成，不联网、不依赖库。需要 Android 的部分
 （Context / Handler / MediaCodec / 无障碍注入）只能在设备上验证，不在覆盖范围内。
 
+## 发版
+
+Release 说明是**写给下载的人看的**，不是开发日志。
+
+- 只说「用户拿到什么变化」，三五行以内
+- 不写实现细节、不写测量数据、不写代码路径、不写排查过程
+- 技术细节留在 commit message 和本文档里
+
+改完之后：
+
+```bash
+./tests/run.sh && ./build.sh
+# 提交源码 → 建 Release → 传 handpan-autoplay.apk
+```
+
+APK 只放 Release，不放代码树。
+
 ## 验证
 
-算法模块（`MidiParser` / `PitchDetector` / `PadMapper` / `KeyDetector` / `TapPlanner`）
-由独立测试脚本验证，**74 项断言**全部通过：
+算法模块（`MidiParser` / `PitchDetector` / `PadMapper` / `KeyDetector` / `TapPlanner` /
+`LaneLayout` / `ScoreLink` 等）由 `./tests/run.sh` 验证，**218 项断言**全部通过。
 
 | 项目 | 结果 |
 |---|---|
@@ -205,14 +222,19 @@ MIDI 固件由 `tests/gen_fixtures.py` 逐字节生成，不联网、不依赖�
 | 截断、非法变长量 → 抛 IOException 不崩溃 | PASS |
 | YIN 检出 A4/C5/E5（含静音前导） | PASS（69/72/76，时间误差 <80ms） |
 | 负例：纯静音 / 白噪声 → 0 个音 | PASS |
-| 九键八度映射（E4→中音3、E5→高音3、A3→低音6、9 键全可达） | PASS 26/26 |
-| 自动识调（12 个调全对） | PASS |
+| 九键音位表（do=C4 时 = C4 D4 E4 F3 G3 A3 B3 A2） | PASS |
+| 弹不到的音的替换阈值（A#3→低音6，B3 保 1 级） | PASS |
+| 音区选择（三度以内不挪、宽音域取偏移最小） | PASS |
+| 自动识调（含五声性旋律必须看整首编曲） | PASS |
 | 自动识速（500/666/400/250ms 间隔分别还原为 120/90/150/120 BPM；无节奏信息时返回 0） | PASS |
-| 和弦分组（do-mi-sol → 一次三指；同键不重复按；上限 1/4/6/9 均生效；0 或负数按 1 处理） | PASS 8/8 |
+| 和弦分组（上限 1/4/6/9 均生效；0 或负数按 1 处理） | PASS |
 | 点击计划（单个音也必须有输出——曾因整数溢出恒为空） | PASS |
-| 存档格式（500/3000 音符往返一致、版本不符/缺头/空内容返回 null、坏行跳过、换行清洗） | PASS 11/11 |
-| 播放计时（暂停期间时间冻结、继续从冻结点接续、连续 5 次暂停/继续不漂移、reset 清零） | PASS 16/16 |
-| 曲目切换索引（双向环绕、当前曲目不在列表、越界 index、空列表、随机不返回自己） | PASS 17/17 |
+| 存档格式（往返一致、版本不符/缺头/空内容返回 null、坏行跳过） | PASS |
+| 播放计时（暂停冻结、继续接续、连续 5 次不漂移） | PASS |
+| 曲目切换索引（双向环绕、越界、空列表、随机不返回自己） | PASS |
+| 练习判定 / 键位命中 / 半径估算 / 倍速时钟 / 音符列表排布 | PASS |
+| 链接导入（分享链接→直链、歌名、按文件头认类型） | PASS |
 | APK 打包合规（resources.arsc 不压缩 + 4 字节对齐） | PASS |
 
-`SongLibrary` 依赖 Android 的 SharedPreferences 与 org.json，无法在纯 JVM 中测试，仅有编译与打包检查覆盖。
+`SongLibrary` 依赖 Android 的 SharedPreferences 与 org.json，`UrlImporter` 需要网络与 `Context`，
+无法在纯 JVM 中测试，仅有编译与打包检查覆盖。
