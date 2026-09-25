@@ -11,6 +11,7 @@ import android.provider.Settings;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
@@ -35,6 +36,14 @@ public final class OverlayController {
     private static TextView sPauseView;
     private static WindowManager sWm;
     private static int sSlot;
+
+    /**
+     * Whether the floating bar is folded down to just its handle.
+     *
+     * <p>Kept across shows on purpose: a player who folds the bar away to see the game does not want
+     * it springing back open on the next song.
+     */
+    private static boolean sCollapsed;
 
     private OverlayController() {}
 
@@ -328,9 +337,13 @@ public final class OverlayController {
         lp.x = dp(ctx, 10);
         lp.y = dp(ctx, 36);
 
+        applyCollapsed(bar, handle);
+
+        final int slop = ViewConfiguration.get(ctx).getScaledTouchSlop();
         handle.setOnTouchListener(new View.OnTouchListener() {
             float downX, downY;
             int startX, startY;
+            boolean dragged;
 
             @Override
             public boolean onTouch(View v, MotionEvent e) {
@@ -340,14 +353,30 @@ public final class OverlayController {
                         downY = e.getRawY();
                         startX = lp.x;
                         startY = lp.y;
+                        // Touch slop, so a careful press is a tap and a shaky one is still a drag.
+                        dragged = false;
                         return true;
                     case MotionEvent.ACTION_MOVE:
+                        if (Math.abs(e.getRawX() - downX) > slop
+                                || Math.abs(e.getRawY() - downY) > slop) {
+                            dragged = true;
+                        }
                         lp.x = startX + (int) (e.getRawX() - downX);
                         lp.y = startY + (int) (e.getRawY() - downY);
                         try {
                             sWm.updateViewLayout(bar, lp);
                         } catch (RuntimeException ignored) {
                         }
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        // A tap on the handle folds the bar down to the handle and back. Keeping the
+                        // window position means unfolding puts the buttons exactly where they were.
+                        if (!dragged) {
+                            sCollapsed = !sCollapsed;
+                            applyCollapsed(bar, handle);
+                        }
+                        return true;
+                    case MotionEvent.ACTION_CANCEL:
                         return true;
                     default:
                         return false;
@@ -362,6 +391,27 @@ public final class OverlayController {
         } catch (RuntimeException e) {
             sStopView = null;
         }
+    }
+
+    /**
+     * Shows or hides everything on the bar except the handle.
+     *
+     * <p>The window is {@code WRAP_CONTENT}, so hiding the buttons shrinks the whole thing down to
+     * the handle by itself - no separate layout to keep in sync.
+     */
+    private static void applyCollapsed(View bar, View handle) {
+        if (!(bar instanceof android.view.ViewGroup)) return;
+        android.view.ViewGroup group = (android.view.ViewGroup) bar;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child == handle) continue;
+            child.setVisibility(sCollapsed ? View.GONE : View.VISIBLE);
+        }
+    }
+
+    /** True while the bar is folded down to its handle. */
+    public static boolean isCollapsed() {
+        return sCollapsed;
     }
 
     public static void hideStopButton() {

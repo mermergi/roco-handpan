@@ -62,6 +62,16 @@ public class MainActivity extends Activity {
      */
     private boolean switching;
 
+    /**
+     * True only while the user's own 停止 is tearing playback down.
+     *
+     * <p>A finished-but-not-completed run reaches the listener from every {@code Playback.stop()},
+     * including the internal one inside {@code Playback.start()}. Without this flag there is no way
+     * to tell "the user asked to stop" from "the run was interrupted", and treating both the same is
+     * what made the floating bar disappear on its own.
+     */
+    private boolean userStopped;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -343,11 +353,6 @@ public class MainActivity extends Activity {
 
     /** Starts playing the current song immediately, with no countdown. */
     private void startNow() {
-        // Every start path funnels through here, so this is the one place that must guarantee the
-        // transport bar exists - switching songs used to hide it and never bring it back.
-        if (!OverlayController.isBarVisible()) {
-            OverlayController.showTransport(this, transport());
-        }
         List<Playback.Tap> taps = buildTaps();
         if (taps.isEmpty()) {
             OverlayController.hideStopButton();
@@ -360,8 +365,15 @@ public class MainActivity extends Activity {
             return;
         }
         OverlayController.setPaused(false);
-        setStatus("演奏中…（" + taps.size() + " 次点击，" + modeDescription() + "）");
+
+        // Playback.start() stops whatever was running, and that stop reports "finished" to the same
+        // listener that hides the bar - so the bar has to be ensured *after* starting, not before.
+        // Doing it the other way round is what made the controls vanish from time to time.
         Playback.start(taps, playbackListener());
+        if (!OverlayController.isBarVisible()) {
+            OverlayController.showTransport(this, transport());
+        }
+        setStatus("演奏中…（" + taps.size() + " 次点击，" + modeDescription() + "）");
     }
 
     /** Floating bar callbacks: previous / pause-resume / next / stop. */
@@ -443,14 +455,29 @@ public class MainActivity extends Activity {
             @Override
             public void onFinish(final boolean completed) {
                 if (switching) return; // the switch path handles the UI
-                if (completed && AppPrefs.getPlayMode(MainActivity.this) != AppPrefs.MODE_SINGLE) {
-                    advance();
+                if (completed) {
+                    int mode = AppPrefs.getPlayMode(MainActivity.this);
+                    if (mode == AppPrefs.MODE_SEQUENCE || mode == AppPrefs.MODE_RANDOM) {
+                        advance();
+                        return;
+                    }
+                    // 单曲循环: the same song again, with the same lead-in the taps already carry.
+                    setStatus("单曲循环，重来一遍：" + currentName());
+                    startNow();
                     return;
                 }
-                OverlayController.hideStopButton();
-                setStatus(completed ? "演奏完成 ✓" : "已停止。");
-                if (completed) {
-                    Toast.makeText(getApplicationContext(), "演奏完成", Toast.LENGTH_SHORT).show();
+                // Not completed means playback was interrupted. Only the user's own 停止 should take
+                // the controls away; if the run died for some other reason (the accessibility service
+                // went away for a moment, say) leaving the bar up is the difference between "press
+                // 停止" and having no controls at all.
+                if (userStopped) {
+                    OverlayController.hideStopButton();
+                    setStatus("已停止。");
+                } else {
+                    if (!OverlayController.isBarVisible()) {
+                        OverlayController.showTransport(MainActivity.this, transport());
+                    }
+                    setStatus("演奏中断了。点【开始】重来，或用悬浮条换一首。");
                 }
             }
         };
@@ -459,7 +486,12 @@ public class MainActivity extends Activity {
     private void stop() {
         countdownLeft = 0;
         ui.removeCallbacksAndMessages(null);
-        Playback.stop();
+        userStopped = true;
+        try {
+            Playback.stop();
+        } finally {
+            userStopped = false;
+        }
         OverlayController.hideStopButton();
         setStatus("已停止。");
     }
@@ -750,7 +782,7 @@ public class MainActivity extends Activity {
         int mode = AppPrefs.getPlayMode(this);
         if (mode == AppPrefs.MODE_RANDOM) return "随机演奏";
         if (mode == AppPrefs.MODE_SEQUENCE) return "顺序演奏";
-        return "单曲演奏";
+        return "单曲循环";
     }
 
     private void setStatus(String message) {

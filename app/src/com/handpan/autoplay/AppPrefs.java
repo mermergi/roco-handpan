@@ -166,7 +166,7 @@ public final class AppPrefs {
     public static final int MODE_RANDOM = 2;
 
     /** Labels for the mode spinner, indexed by the MODE_* constants. */
-    public static final String[] MODE_LABELS = {"单曲演奏", "顺序演奏（接下一首）", "随机演奏"};
+    public static final String[] MODE_LABELS = {"单曲循环", "顺序演奏（接下一首）", "随机演奏"};
 
     public static int getPlayMode(Context c) {
         return sp(c).getInt(K_MODE, MODE_SINGLE);
