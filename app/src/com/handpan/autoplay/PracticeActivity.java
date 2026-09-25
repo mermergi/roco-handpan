@@ -179,7 +179,26 @@ public class PracticeActivity extends Activity {
         return SpeedClock.SPEEDS[position];
     }
 
+    /**
+     * Rebuilds the source list, keeping whichever song was selected.
+     *
+     * <p>{@code setAdapter} resets the spinner to position 0, and this runs from {@code onResume} -
+     * so every trip into the game and back silently re-selected the first song. Picking a song to
+     * practise looked like it simply did not take.
+     *
+     * @param selectUri entry to select afterwards, or null to keep the current selection
+     */
     private void refreshSources() {
+        refreshSources(null);
+    }
+
+    private void refreshSources(String selectUri) {
+        String keep = selectUri;
+        if (keep == null) {
+            int position = spSource.getSelectedItemPosition();
+            if (position >= 0 && position < sources.size()) keep = sources.get(position).uri;
+        }
+
         sources = SongLibrary.list(this);
         List<String> names = new ArrayList<String>();
         for (int i = 0; i < sources.size(); i++) {
@@ -191,6 +210,17 @@ public class PracticeActivity extends Activity {
                 android.R.layout.simple_spinner_item, names);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spSource.setAdapter(adapter);
+
+        int restore = 0;
+        if (keep != null) {
+            for (int i = 0; i < sources.size(); i++) {
+                if (keep.equals(sources.get(i).uri)) {
+                    restore = i;
+                    break;
+                }
+            }
+        }
+        spSource.setSelection(restore);
     }
 
     // ------------------------------------------------------------------ starting a run
@@ -270,8 +300,40 @@ public class PracticeActivity extends Activity {
         status("练习中：" + name + "（共 " + chart.size() + " 次按键）"
                 + (takeOver ? "" : "　仅提示，不判分"));
         GameOverlay.start(this, GameOverlay.MODE_PRACTICE, session, callback, takeOver,
-                chosenSpeed());
+                chosenSpeed(), new GameOverlay.Transport() {
+                    @Override
+                    public void onPrevious() {
+                        switchPractice(-1);
+                    }
+
+                    @Override
+                    public void onNext() {
+                        switchPractice(1);
+                    }
+                });
         goToGame();
+    }
+
+    /**
+     * Moves to the previous or next song and restarts practice on it, without leaving the game.
+     *
+     * <p>{@code GameOverlay.stop()} deliberately does not call the finished callback, so this neither
+     * scores the abandoned run nor writes a status line about it.
+     */
+    private void switchPractice(int delta) {
+        List<SongLibrary.Entry> entries = SongLibrary.list(this);
+        if (entries.size() < 2) {
+            Toast.makeText(getApplicationContext(),
+                    "曲目库里只有 " + entries.size() + " 首，没有别的可以换。",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        int index = PlaylistNavigator.step(spSource.getSelectedItemPosition(), delta, entries.size());
+        if (index < 0) index = 0;
+        // Re-pick by uri, so a library that changed while the game was in front still lines up.
+        refreshSources(entries.get(index).uri);
+        GameOverlay.stop();
+        startRun();
     }
 
     private void goToGame() {
@@ -293,7 +355,8 @@ public class PracticeActivity extends Activity {
                     SongLibrary.add(PracticeActivity.this, RecordingStore.SCHEME + id, name, "录音",
                             AppPrefs.getKey(PracticeActivity.this), recordedHits,
                             Math.max(1, estimateSeconds()));
-                    refreshSources();
+                    // Select the recording that was just saved, so it is ready to practise.
+                    refreshSources(RecordingStore.SCHEME + id);
                     status(summary + "\n已保存为「" + name + "」，在曲目库里可以直接弹进游戏。");
                     return;
                 }

@@ -99,6 +99,18 @@ public final class GameOverlay {
         void onFinished(String summary, int recordedHits);
     }
 
+    /**
+     * Lets the control bar change song without leaving the game.
+     *
+     * <p>Practice runs from inside the game, so sending the player back to the app just to pick the
+     * next song would defeat the point.
+     */
+    public interface Transport {
+        void onPrevious();
+
+        void onNext();
+    }
+
     private static View sGuideRoot;
     private static BoardView sBoard;
     private static View sControlRoot;
@@ -111,6 +123,7 @@ public final class GameOverlay {
     private static Callback sCallback;
     private static PracticeSession sSession;
     private static int sMode;
+    private static Transport sTransport;
     private static boolean sTakeOver;
     private static long sStart;
     private static final List<RecordingCodec.Hit> sRecorded = new ArrayList<RecordingCodec.Hit>();
@@ -136,6 +149,16 @@ public final class GameOverlay {
      */
     public static void start(Context context, int mode, PracticeSession session, Callback callback,
                              boolean takeOverTouch, float speed) {
+        start(context, mode, session, callback, takeOverTouch, speed, null);
+    }
+
+    /**
+     * @param takeOverTouch true to intercept touches so presses can be recorded or judged; false to
+     *                      draw guidance only, leaving the game's own input completely untouched
+     * @param transport     previous/next song buttons on the control bar, or null for none
+     */
+    public static void start(Context context, int mode, PracticeSession session, Callback callback,
+                             boolean takeOverTouch, float speed, Transport transport) {
         stop();
         final Context ctx = context.getApplicationContext();
         if (!OverlayController.canDraw(ctx)) {
@@ -145,6 +168,7 @@ public final class GameOverlay {
         sMode = mode;
         sSession = session;
         sCallback = callback;
+        sTransport = transport;
         sTakeOver = takeOverTouch;
         sRecorded.clear();
         sStrays = 0;
@@ -229,6 +253,22 @@ public final class GameOverlay {
         sStatus.setPadding(Ui.dp(ctx, 10), Ui.dp(ctx, 6), Ui.dp(ctx, 10), Ui.dp(ctx, 6));
         bar.addView(sStatus);
 
+        // Song switching, practice only: a recording is one take, there is nothing to switch to.
+        if (modeIsPractice() && sTransport != null) {
+            bar.addView(controlButton(ctx, "上一首", new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (sTransport != null) sTransport.onPrevious();
+                }
+            }));
+            bar.addView(controlButton(ctx, "下一首", new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (sTransport != null) sTransport.onNext();
+                }
+            }));
+        }
+
         TextView stop = new TextView(ctx);
         stop.setText("■ 结束");
         stop.setTextColor(0xFFFF8A80);
@@ -266,6 +306,23 @@ public final class GameOverlay {
 
     private static boolean modeIsPractice() {
         return sMode == MODE_PRACTICE;
+    }
+
+    /** A small button for the control bar. */
+    private static TextView controlButton(Context ctx, String text, View.OnClickListener click) {
+        TextView view = new TextView(ctx);
+        view.setText(text);
+        view.setTextColor(Color.WHITE);
+        view.setTextSize(14f);
+        view.setGravity(Gravity.CENTER);
+        view.setBackgroundResource(R.drawable.overlay_button);
+        view.setPadding(Ui.dp(ctx, 12), Ui.dp(ctx, 9), Ui.dp(ctx, 12), Ui.dp(ctx, 9));
+        view.setOnClickListener(click);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(Ui.dp(ctx, 3), 0, 0, 0);
+        view.setLayoutParams(params);
+        return view;
     }
 
     private static String speedLabel() {
