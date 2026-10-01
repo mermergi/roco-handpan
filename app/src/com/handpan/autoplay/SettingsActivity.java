@@ -23,6 +23,15 @@ public class SettingsActivity extends Activity {
 
     private TextView tvPerms;
 
+    /** Progress of the wait for the accessibility service to bind. */
+    private int serviceWait;
+    private static final long SERVICE_WAIT_MS = 200L;
+    private static final int SERVICE_WAIT_TRIES = 15;
+
+    /** Main-looper handler, so a retry survives the user leaving the screen and coming back. */
+    private static final android.os.Handler PERM =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -96,14 +105,53 @@ public class SettingsActivity extends Activity {
 
     /** Taps every calibrated pad once so the user can check the coordinates before a real run. */
     private void testPads() {
-        if (!HandpanAccessibilityService.isReady()) {
-            toast("无障碍服务未开启，无法试弹。");
-            return;
-        }
         if (!AppPrefs.hasCalibration(this)) {
             toast("还没校准完整，先点【校准琴键】。");
             return;
         }
+        whenServiceReady(new Runnable() {
+            @Override
+            public void run() {
+                runTestPads();
+            }
+        });
+    }
+
+    /**
+     * Waits for the accessibility service to bind before testing.
+     *
+     * <p>Coming straight back from switching the service on used to fail here: the switch was on, the
+     * binding had not arrived, and "not connected yet" was treated as "not enabled".
+     */
+    private void whenServiceReady(final Runnable action) {
+        if (HandpanAccessibilityService.isReady()) {
+            serviceWait = 0;
+            action.run();
+            return;
+        }
+        if (HandpanAccessibilityService.isEnabled(this) && serviceWait < SERVICE_WAIT_TRIES) {
+            serviceWait++;
+            toast("无障碍已开启，等它连上…");
+            PERM.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    whenServiceReady(action);
+                }
+            }, SERVICE_WAIT_MS);
+            return;
+        }
+        boolean enabled = HandpanAccessibilityService.isEnabled(this);
+        serviceWait = 0;
+        if (enabled) {
+            tvPerms.setText("无障碍服务开着，但系统一直没把它连上。\n"
+                    + "到系统设置的无障碍里把它【关掉再打开】一次，回来再点【试弹九个键】。");
+            toast("无障碍没连上：去系统设置里关掉再打开一次。");
+        } else {
+            toast("无障碍服务未开启，无法试弹。先点上面的【开启无障碍服务】。");
+        }
+    }
+
+    private void runTestPads() {
         List<Playback.Tap> taps = new ArrayList<Playback.Tap>();
         for (int slot = 0; slot < AppPrefs.SLOTS; slot++) {
             float[] p = AppPrefs.getPad(this, slot);
@@ -129,6 +177,14 @@ public class SettingsActivity extends Activity {
             @Override
             public void onFinish(boolean completed) {
                 OverlayController.hideStopButton();
+                int dropped = Playback.dropped();
+                if (dropped > 0) {
+                    // The visible half of the silent failure: gestures the device refused outright.
+                    Toast.makeText(getApplicationContext(),
+                            "试弹结束，但有 " + dropped + " 下被系统拒绝了（没发到游戏）。\n"
+                                    + "到系统设置里把无障碍服务关掉再打开一次。",
+                            Toast.LENGTH_LONG).show();
+                }
             }
         });
     }

@@ -2,8 +2,10 @@ package com.handpan.autoplay;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Path;
+import android.provider.Settings;
 import android.view.accessibility.AccessibilityEvent;
 
 /**
@@ -27,6 +29,33 @@ public class HandpanAccessibilityService extends AccessibilityService {
 
     public static boolean isReady() {
         return sInstance != null;
+    }
+
+    /**
+     * True when the system lists this service as switched on, whether or not it has bound yet.
+     *
+     * <p>{@link #isReady()} only knows about the binding, and on several ROMs the switch is on while
+     * the binding is still on its way - or never arrives until the service is toggled again. Telling
+     * those two states apart is the difference between "wait a moment" and "go toggle it", so the
+     * app no longer treats one as the other.
+     */
+    public static boolean isEnabled(Context context) {
+        String flat = null;
+        try {
+            flat = Settings.Secure.getString(context.getContentResolver(),
+                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        } catch (RuntimeException e) {
+            return false;
+        }
+        if (flat == null || flat.length() == 0) return false;
+
+        String full = context.getPackageName() + "/" + HandpanAccessibilityService.class.getName();
+        String shortForm = context.getPackageName() + "/.HandpanAccessibilityService";
+        for (String entry : flat.split(":")) {
+            String value = entry.trim();
+            if (value.equalsIgnoreCase(full) || value.equalsIgnoreCase(shortForm)) return true;
+        }
+        return false;
     }
 
     @Override

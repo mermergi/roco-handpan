@@ -72,6 +72,13 @@ public class MainActivity extends Activity {
      */
     private boolean userStopped;
 
+    /** Progress of the wait for the accessibility service to bind, in {@link #SERVICE_WAIT_MS} steps. */
+    private int serviceWait;
+
+    /** 200 ms for up to 3 s: long enough for a slow ROM to finish binding the service. */
+    private static final long SERVICE_WAIT_MS = 200L;
+    private static final int SERVICE_WAIT_TRIES = 15;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -314,10 +321,6 @@ public class MainActivity extends Activity {
             setStatus("还没有选曲目。到【曲目库】选一首，或直接导入一个文件。");
             return;
         }
-        if (!HandpanAccessibilityService.isReady()) {
-            setStatus("无障碍服务未开启，无法自动弹奏。到【设置】里开启。");
-            return;
-        }
         if (!AppPrefs.hasCalibration(this)) {
             setStatus("琴键还没校准完整（" + AppPrefs.calibratedCount(this) + "/" + AppPrefs.SLOTS
                     + "）。到【设置】里点【校准琴键】。");
@@ -327,7 +330,45 @@ public class MainActivity extends Activity {
             setStatus("没有可弹奏的音符：这首曲子解析出来是空的，换一首或重新解析。");
             return;
         }
-        startCountdown();
+        whenServiceReady(new Runnable() {
+            @Override
+            public void run() {
+                startCountdown();
+            }
+        });
+    }
+
+    /**
+     * Waits for the accessibility service to actually bind before doing something that needs it.
+     *
+     * <p>Turning the service on in system settings and coming straight back used to fail: the switch
+     * was on, the binding had not arrived yet, and the app treated "not connected yet" exactly like
+     * "not enabled" and gave up. Waiting a couple of seconds covers the first case; the message for
+     * the second tells the user the one thing that reliably fixes it, which is toggling it again.
+     */
+    private void whenServiceReady(final Runnable action) {
+        if (HandpanAccessibilityService.isReady()) {
+            serviceWait = 0;
+            action.run();
+            return;
+        }
+        if (HandpanAccessibilityService.isEnabled(this) && serviceWait < SERVICE_WAIT_TRIES) {
+            serviceWait++;
+            setStatus("无障碍已开启，正在等它连上…");
+            ui.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    whenServiceReady(action);
+                }
+            }, SERVICE_WAIT_MS);
+            return;
+        }
+        boolean enabled = HandpanAccessibilityService.isEnabled(this);
+        serviceWait = 0;
+        setStatus(enabled
+                ? "无障碍服务开着，但系统一直没把它连上。\n"
+                        + "到系统设置的无障碍里把它【关掉再打开】一次，回来再点开始。"
+                : "无障碍服务未开启，无法自动弹奏。到【设置】里开启。");
     }
 
     /** Runs the countdown, then starts playback. Used both by 【开始演奏】 and chained playback. */
@@ -353,15 +394,30 @@ public class MainActivity extends Activity {
 
     /** Starts playing the current song immediately, with no countdown. */
     private void startNow() {
-        List<Playback.Tap> taps = buildTaps();
+        final List<Playback.Tap> taps = buildTaps();
         if (taps.isEmpty()) {
             OverlayController.hideStopButton();
             setStatus("没有可弹奏的音符。");
             return;
         }
         if (!HandpanAccessibilityService.isReady()) {
+            // The service can still be on its way up. Wait for it rather than dropping the run -
+            // this is the same hole that made 试弹 fail right after the switch was turned on.
+            whenServiceReady(new Runnable() {
+                @Override
+                public void run() {
+                    beginRun(taps);
+                }
+            });
+            return;
+        }
+        beginRun(taps);
+    }
+
+    private void beginRun(List<Playback.Tap> taps) {
+        if (!HandpanAccessibilityService.isReady()) {
             OverlayController.hideStopButton();
-            setStatus("无障碍服务未开启，无法弹奏。");
+            setStatus("无障碍服务没连上，无法弹奏。到系统设置里把它关掉再打开一次。");
             return;
         }
         OverlayController.setPaused(false);
@@ -472,15 +528,29 @@ public class MainActivity extends Activity {
                 // 停止" and having no controls at all.
                 if (userStopped) {
                     OverlayController.hideStopButton();
-                    setStatus("已停止。");
+                    setStatus("已停止。" + droppedNote());
                 } else {
                     if (!OverlayController.isBarVisible()) {
                         OverlayController.showTransport(MainActivity.this, transport());
                     }
-                    setStatus("演奏中断了。点【开始】重来，或用悬浮条换一首。");
+                    setStatus("演奏中断了。点【开始】重来，或用悬浮条换一首。" + droppedNote());
                 }
             }
         };
+    }
+
+    /**
+     * A note about gestures the system refused, or an empty string when everything went out.
+     *
+     * <p>Refused gestures are the one failure the app cannot fix by itself, and they used to be
+     * completely invisible: the run "finished" and nothing had played. Saying so turns a mystery into
+     * something with a next step.
+     */
+    private String droppedNote() {
+        int dropped = Playback.dropped();
+        if (dropped <= 0) return "";
+        return "\n注意：有 " + dropped + " 次点击被系统拒绝了（没发到游戏）。"
+                + "如果整首都没声音，到系统设置里把无障碍服务【关掉再打开】一次。";
     }
 
     private void stop() {

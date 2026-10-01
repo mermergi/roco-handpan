@@ -69,6 +69,9 @@ public final class Playback {
     private static int sIndex;
     private static Listener sListener;
 
+    /** Taps the system refused outright, after every retry. Reported, so silence is never the answer. */
+    private static int sDropped;
+
     /** When the last gesture was handed to the system, and how often the current tap has failed. */
     private static long sLastDispatchAt;
     private static int sAttempts;
@@ -134,11 +137,12 @@ public final class Playback {
                     sIndex++;
                     dispatched++;
                 } else {
-                    // Refused: the system already had a gesture in flight. Try the same note again
-                    // next tick rather than skipping it.
+                    // Refused: the system already had a gesture in flight, or would not take this
+                    // one at all. Try the same note again next tick rather than skipping it.
                     sAttempts++;
                     if (sAttempts < MAX_DISPATCH_ATTEMPTS) break;
                     sAttempts = 0;
+                    sDropped++;
                     sIndex++;
                 }
             }
@@ -158,11 +162,23 @@ public final class Playback {
         sTaps = taps;
         sIndex = 0;
         sAttempts = 0;
+        sDropped = 0;
         sLastDispatchAt = 0L;
         sListener = listener;
         CLOCK.start(SystemClock.uptimeMillis());
         if (sListener != null) sListener.onProgress(0, taps.size());
         HANDLER.postDelayed(TICK, TICK_MS);
+    }
+
+    /**
+     * How many taps the system refused in the run just finished.
+     *
+     * <p>Non-zero means the notes were scheduled but the device would not take the gestures - the one
+     * failure that used to be completely silent, and therefore indistinguishable from "the game
+     * ignored me".
+     */
+    public static int dropped() {
+        return sDropped;
     }
 
     public static synchronized void stop() {

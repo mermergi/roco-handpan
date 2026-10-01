@@ -35,6 +35,13 @@ public class PracticeActivity extends Activity {
     private boolean recordingMode;
     private List<SongLibrary.Entry> sources = new ArrayList<SongLibrary.Entry>();
 
+    /** Progress of the wait for the accessibility service to bind. */
+    private int serviceWait;
+    private static final long SERVICE_WAIT_MS = 200L;
+    private static final int SERVICE_WAIT_TRIES = 15;
+    private final android.os.Handler ui =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -232,7 +239,12 @@ public class PracticeActivity extends Activity {
             return;
         }
         if (!HandpanAccessibilityService.isReady()) {
-            status("需要先开启无障碍服务——你的每一下都要先被它转发给游戏，游戏才会出声。");
+            whenServiceReady(new Runnable() {
+                @Override
+                public void run() {
+                    startRun();
+                }
+            });
             return;
         }
         if (!AppPrefs.hasCalibration(this)) {
@@ -341,6 +353,37 @@ public class PracticeActivity extends Activity {
                 "切到游戏开始吧。角落有【结束】按钮。", Toast.LENGTH_LONG).show();
         // Send this task to the back so the user lands back in the game with one tap.
         moveTaskToBack(true);
+    }
+
+    /**
+     * Waits for the accessibility service to bind before starting.
+     *
+     * <p>Switching the service on and coming straight back used to fail: the switch is on but the
+     * binding has not arrived, and treating that as "not enabled" sends the user in a circle.
+     */
+    private void whenServiceReady(final Runnable action) {
+        if (HandpanAccessibilityService.isReady()) {
+            serviceWait = 0;
+            action.run();
+            return;
+        }
+        if (HandpanAccessibilityService.isEnabled(this) && serviceWait < SERVICE_WAIT_TRIES) {
+            serviceWait++;
+            status("无障碍已开启，正在等它连上…");
+            ui.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    whenServiceReady(action);
+                }
+            }, SERVICE_WAIT_MS);
+            return;
+        }
+        boolean enabled = HandpanAccessibilityService.isEnabled(this);
+        serviceWait = 0;
+        status(enabled
+                ? "无障碍服务开着，但系统一直没把它连上。\n"
+                        + "到系统设置的无障碍里把它【关掉再打开】一次，回来再点开始。"
+                : "需要先开启无障碍服务——你的每一下都要先被它转发给游戏，游戏才会出声。");
     }
 
     private final GameOverlay.Callback callback = new GameOverlay.Callback() {
