@@ -40,6 +40,15 @@ public class SettingsActivity extends Activity {
 
         tvPerms = (TextView) findViewById(R.id.tv_perms);
 
+        // The action bar shows no up arrow here (these screens are launched from the play screen
+        // rather than declared as its children), so the page carries its own way back.
+        findViewById(R.id.btn_back).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                finish();
+            }
+        });
+
         findViewById(R.id.btn_overlay).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
